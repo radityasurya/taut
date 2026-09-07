@@ -1,0 +1,71 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "title": "Home \u00b7 Mocha",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "PaneAgent.dc.html",
+      "title": "Pane \u00b7 Claude blocked",
+      "x": 480,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "PaneShell.dc.html",
+      "title": "Pane \u00b7 shell (htop, fit width)",
+      "x": 960,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Settings.dc.html",
+      "title": "Settings",
+      "x": 1440,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "HomeLatte.dc.html",
+      "title": "Home \u00b7 Latte",
+      "x": 0,
+      "y": 1000,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Sheet.dc.html",
+      "title": "New Tab drawer",
+      "x": 480,
+      "y": 1000,
+      "w": 390,
+      "h": 844
+    }
+  ],
+  "annotations": [
+    {
+      "id": "direction",
+      "x": 960,
+      "y": 1000,
+      "w": 420,
+      "text": "Direction: Linear/Notion density, one accent (Catppuccin Mocha shown; Latte twin bottom-left).\n\nHome: pinned 'Needs you' above Workspace groups. Dot filled = unseen, hollow ring = seen. Line 2 = blocked reason / last screen line. Right = time since status change.\n\nPane: agent chip row (swipe lives here, not on the grid), sticky blocked card built from herdr's detection, key bar ordered by frequency, composer labelled with the agent's glyph. Shell panes get the grid + shell key set only.\n\nFloating tab bar on the three root routes; hides while the composer has focus. Real status bar and keyboard are left blank on purpose."
+    },
+    {
+      "id": "todo",
+      "x": 960,
+      "y": 1330,
+      "w": 420,
+      "text": "Open questions for review:\n1. Chip row: show for one Agent too, or only when \u22652?\n2. Blocked card: collapsible to one line by default, or open?\n3. Theme chips vs a full list in Settings.\n4. '120\u00d748' toggle label: grid size or the word 'Fit'?"
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}
