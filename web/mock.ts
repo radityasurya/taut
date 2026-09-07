@@ -1,0 +1,392 @@
+// Fixtures plus a fake Hub, so the web app runs with no herdr, no Host and no network.
+// Nothing imports this in production: `installMock()` is a no-op unless the page is
+// opened with `?mock` (or built with VITE_MOCK=1).
+import type {
+  Explain, InputBody, Screen, ScreenEvent, ScreenMode, SeenBody, State, StatePane, Status,
+} from '../shared/types.ts';
+
+// ---- fixtures ----
+
+const RESET = '\x1b[0m';
+const DIM = '\x1b[2m';
+const BOLD = '\x1b[1m';
+const ORANGE = '\x1b[38;5;214m'; // 256-colour
+const BLUE = '\x1b[38;5;39m';
+const GREEN = '\x1b[32m';
+const CLAUDE = '\x1b[38;2;215;119;87m'; // truecolor
+
+/** Interior width of the permission box, in columns. */
+const BOX = 58;
+const row = (text: string, sgr = '') =>
+  `${ORANGE}│${RESET} ${sgr}${text}${sgr && RESET}${' '.repeat(Math.max(0, BOX - 1 - text.length))}${ORANGE}│${RESET}`;
+
+/** What herdr classified: a Claude Code tool-permission prompt, as it sits on the screen. */
+const PERMISSION_BOX = [
+  `${ORANGE}┌─ ${BOLD}Permission required${RESET}${ORANGE} ${'─'.repeat(BOX - 22)}┐${RESET}`,
+  row(''),
+  row('Bash command', BOLD),
+  row('  pnpm test --filter ansi', BLUE),
+  row('  Run the ANSI parser tests'),
+  row(''),
+  row('Do you want to proceed?'),
+  row('❯ 1. Yes', BOLD),
+  row('  2. Yes, and don’t ask again for pnpm'),
+  row('  3. No, and tell Claude what to do differently'),
+  row(''),
+  `${ORANGE}└${'─'.repeat(BOX)}┘${RESET}`,
+];
+
+const HINT_LINE = `${DIM}  esc to cancel · enter to confirm${RESET}`;
+
+/** A Claude Code TUI mid-run, 24 rows, ending on the permission prompt. */
+const CLAUDE_VISIBLE = [
+  `${CLAUDE}✻${RESET} ${BOLD}Claude Code${RESET} ${DIM}v2.1.4${RESET}  ${DIM}~/projects/taut${RESET}`,
+  '',
+  `${BLUE}●${RESET} ${BOLD}Read${RESET} ${DIM}shared/ansi.ts${RESET}`,
+  `  ${GREEN}⎿${RESET}  ${DIM}Read 84 lines${RESET}`,
+  '',
+  `${CLAUDE}✻${RESET} The failure is in the SGR 22 branch: it clears ${BOLD}bold${RESET} and`,
+  `  ${DIM}dim${RESET} together, so a run styled dim-only keeps its weight when`,
+  '  the parser merges the next span. I will run the suite to confirm.',
+  '',
+  `${BLUE}●${RESET} ${BOLD}Bash${RESET} ${DIM}pnpm test --filter ansi${RESET}`,
+  '',
+  ...PERMISSION_BOX,
+  HINT_LINE,
+].join('\r\n');
+
+/** The same Pane in `recent` mode: reflowed, no styling. */
+const CLAUDE_RECENT = [
+  '● Read shared/ansi.ts',
+  '  ⎿  Read 84 lines',
+  '● Read test/ansi.test.ts',
+  '  ⎿  Read 31 lines',
+  '',
+  'The failure is in the SGR 22 branch: it clears bold and dim together, so a run styled dim-only keeps its weight when the parser merges the next span. I will run the suite to confirm.',
+  '',
+  '● Bash pnpm test --filter ansi',
+  '',
+  'Permission required — Bash command: pnpm test --filter ansi',
+  'Do you want to proceed?',
+  '  1. Yes',
+  '  2. Yes, and don’t ask again for pnpm',
+  '  3. No, and tell Claude what to do differently',
+  'esc to cancel · enter to confirm',
+].join('\r\n');
+
+const host = (id: string, label: string, online: boolean, error?: string) => ({ id, label, online, error });
+
+export const mockState: State = {
+  hosts: [
+    host('mbp', 'MacBook', true),
+    host('vps', 'Hetzner', false, 'ssh: connect to host vps.tail9f2c.ts.net port 22: Operation timed out'),
+  ],
+  muxes: [
+    { key: 'mbp/herdr', hostId: 'mbp', kind: 'herdr', label: 'herdr', online: true },
+    { key: 'mbp/tmux', hostId: 'mbp', kind: 'tmux', label: 'tmux', online: true },
+    { key: 'vps/herdr', hostId: 'vps', kind: 'herdr', label: 'herdr', online: false },
+  ],
+  workspaces: [
+    { key: 'mbp/herdr/taut', muxKey: 'mbp/herdr', id: 'taut', label: 'taut', cwd: '~/projects/taut' },
+    { key: 'mbp/herdr/digivaley', muxKey: 'mbp/herdr', id: 'digivaley', label: 'digivaley.com', cwd: '~/projects/digivaley.com' },
+    // Empty on purpose: Home must not render a Workspace with no Panes.
+    { key: 'mbp/herdr/dotfiles', muxKey: 'mbp/herdr', id: 'dotfiles', label: 'dotfiles', cwd: '~/.local/share/chezmoi' },
+    { key: 'mbp/tmux/admin', muxKey: 'mbp/tmux', id: 'admin', label: 'admin', cwd: '~' },
+    { key: 'vps/herdr/blog', muxKey: 'vps/herdr', id: 'blog', label: 'blog', cwd: '~/srv/blog' },
+  ],
+  panes: [
+    {
+      key: 'mbp/herdr/p1', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't1', id: 'p1',
+      title: 'claude — fix flaky ansi test', cwd: '~/projects/taut', agent: 'claude',
+      status: 'blocked', revision: 412, seenRevision: 402, cols: 80, rows: 24,
+    },
+    {
+      key: 'mbp/herdr/p2', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't2', id: 'p2',
+      title: 'codex — split the Mux registry', cwd: '~/projects/taut', agent: 'codex',
+      status: 'working', revision: 1180, seenRevision: 1180, cols: 80, rows: 24,
+    },
+    {
+      key: 'mbp/herdr/p3', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't2', id: 'p3',
+      title: 'pnpm dev', cwd: '~/projects/taut',
+      status: 'unknown', revision: 87, seenRevision: 87, cols: 80, rows: 24,
+    },
+    {
+      key: 'mbp/herdr/p4', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't3', id: 'p4',
+      title: 'claude — write ARCHITECTURE.md', cwd: '~/projects/taut', agent: 'claude',
+      status: 'done', revision: 640, seenRevision: 611, cols: 80, rows: 24,
+    },
+    {
+      key: 'mbp/herdr/p5', muxKey: 'mbp/herdr', workspaceId: 'digivaley', tabId: 't4', id: 'p5',
+      title: 'codex — bump deps', cwd: '~/projects/digivaley.com', agent: 'codex',
+      status: 'blocked', revision: 55, seenRevision: 55, cols: 80, rows: 24,
+    },
+    {
+      key: 'mbp/herdr/p6', muxKey: 'mbp/herdr', workspaceId: 'digivaley', tabId: 't4', id: 'p6',
+      title: 'claude — restyle the pricing page', cwd: '~/projects/digivaley.com', agent: 'claude',
+      status: 'idle', revision: 233, seenRevision: 233, cols: 80, rows: 24,
+    },
+    {
+      key: 'mbp/herdr/p7', muxKey: 'mbp/herdr', workspaceId: 'digivaley', tabId: 't5', id: 'p7',
+      title: 'zsh', cwd: '~/projects/digivaley.com',
+      status: 'idle', revision: 12, seenRevision: 12, cols: 80, rows: 24,
+    },
+    {
+      key: 'mbp/tmux/p0', muxKey: 'mbp/tmux', workspaceId: 'admin', tabId: 'w0', id: 'p0',
+      title: 'htop', cwd: '~',
+      status: 'unknown', revision: 3, seenRevision: 0, cols: 120, rows: 30,
+    },
+  ],
+};
+
+export const mockExplains: Record<string, Explain> = {
+  'mbp/herdr/p1': {
+    ruleId: 'claude.permission.bash',
+    state: 'blocked',
+    detection: [...PERMISSION_BOX, HINT_LINE].join('\r\n'),
+    hintKeys: [{ key: 'enter', label: 'Yes' }, { key: 'esc', label: 'No' }],
+  },
+  'mbp/herdr/p5': {
+    ruleId: 'prompt.idle',
+    state: 'blocked',
+    detection: [
+      `${DIM}› Ran 14 tasks, 2 packages need a major bump.${RESET}`,
+      `${BOLD}Press enter to continue${RESET}${DIM}, or type a new instruction.${RESET}`,
+    ].join('\r\n'),
+    hintKeys: [{ key: 'enter', label: 'Continue' }],
+  },
+};
+
+const strip = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, '');
+const basename = (cwd?: string) => cwd?.replace(/\/+$/, '').split('/').pop() ?? '~';
+
+const TAIL: Record<Status, string> = {
+  working: `${BLUE}⠋${RESET} ${DIM}working…${RESET}`,
+  blocked: `${ORANGE}?${RESET} waiting for an answer`,
+  done: `${GREEN}✔${RESET} ${DIM}finished in 4.2s${RESET}`,
+  idle: `${GREEN}❯${RESET} `,
+  unknown: `${DIM}…${RESET}`,
+};
+
+// ponytail: one generic screen for every Pane that is not the star of the fixture.
+function genericScreen(pane: StatePane): string {
+  return [
+    `${GREEN}${basename(pane.cwd)}${RESET} ${BLUE}❯${RESET} ${pane.title}`,
+    '',
+    TAIL[pane.status],
+  ].join('\r\n');
+}
+
+const pair = (revision: number, visible: string, recent: string): Record<ScreenMode, Screen> => ({
+  visible: { text: visible, ansi: true, revision, mode: 'visible' },
+  recent: { text: recent, ansi: false, revision, mode: 'recent' },
+});
+
+/** Both Screen modes for every Pane, keyed by paneKey. */
+export const mockScreens: Record<string, Record<ScreenMode, Screen>> = Object.fromEntries(
+  mockState.panes.map((p) => [
+    p.key,
+    p.key === 'mbp/herdr/p1'
+      ? pair(p.revision, CLAUDE_VISIBLE, CLAUDE_RECENT)
+      : pair(p.revision, genericScreen(p), strip(genericScreen(p))),
+  ]),
+);
+
+/** The fixtures must keep exercising every branch of the UI. Cheaper than a test file. */
+export function assertMockInvariants(): void {
+  const statuses = new Set(mockState.panes.map((p) => p.status));
+  const problems = [
+    (['idle', 'working', 'blocked', 'done', 'unknown'] as Status[]).every((s) => statuses.has(s)) || 'every Status',
+    mockState.panes.some((p) => p.revision > p.seenRevision) || 'an unseen Pane',
+    mockState.workspaces.some((w) => !mockState.panes.some((p) => p.muxKey === w.muxKey && p.workspaceId === w.id)) || 'an empty Workspace',
+    Object.values(mockExplains).some((e) => e.ruleId.includes('permission')) || 'a permission Explain',
+    mockState.panes.every((p) => mockScreens[p.key]) || 'a Screen per Pane',
+  ].filter((p) => p !== true);
+  if (problems.length) throw new Error(`mock fixtures lost ${problems.join(', ')}`);
+}
+
+// ---- fake Hub ----
+
+interface Store {
+  state: State;
+  screens: Record<string, Record<ScreenMode, Screen>>;
+  settings: Record<string, unknown>;
+}
+
+let store: Store | null = null;
+let installed = false;
+const sources = new Set<MockEventSource>();
+
+const meta = (key: string): unknown => (import.meta as unknown as { env?: Record<string, unknown> }).env?.[key];
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const pick = <T,>(list: T[]): T | undefined => list[Math.floor(Math.random() * list.length)];
+
+/** Keep `visible` to a screenful and `recent` to a short scrollback. */
+const clamp = (text: string, rows: number) => text.split('\r\n').slice(-rows).join('\r\n');
+
+/** Append output to a Pane, bump its revision, and keep both Screen modes in step. */
+function append(s: Store, key: string, ...lines: string[]): void {
+  const pane = s.state.panes.find((p) => p.key === key);
+  const screens = s.screens[key];
+  if (!pane || !screens) return;
+  pane.revision += 1;
+  screens.visible.text = clamp(`${screens.visible.text}\r\n${lines.join('\r\n')}`, 24);
+  screens.recent.text = clamp(`${screens.recent.text}\r\n${lines.map(strip).join('\r\n')}`, 120);
+  screens.visible.revision = pane.revision;
+  screens.recent.revision = pane.revision;
+}
+
+function input(s: Store, key: string, body: InputBody): void {
+  const pane = s.state.panes.find((p) => p.key === key);
+  if (!pane) return;
+  if (body.text) append(s, key, `${BLUE}›${RESET} ${body.text}`, `${DIM}  … thinking${RESET}`);
+  for (const k of body.keys ?? []) {
+    append(s, key, k === 'enter' ? '⏎' : `${DIM}[${k}]${RESET}`);
+    if (pane.status === 'blocked' && (k === 'enter' || k === 'esc')) {
+      pane.status = k === 'enter' ? 'working' : 'idle';
+      append(s, key, k === 'enter' ? `${GREEN}✔${RESET} ${DIM}running pnpm test --filter ansi${RESET}` : `${DIM}cancelled${RESET}`);
+    }
+  }
+}
+
+const LOG = [
+  `${BLUE}●${RESET} ${BOLD}Edit${RESET} ${DIM}server/mux.ts${RESET}`,
+  `  ${GREEN}⎿${RESET}  ${DIM}Updated 2 additions, 1 removal${RESET}`,
+  `${BLUE}●${RESET} ${BOLD}Grep${RESET} ${DIM}paneKey${RESET}`,
+  `  ${GREEN}⎿${RESET}  ${DIM}Found 11 matches${RESET}`,
+  `${DIM}  ✻ Reticulating splines… (12s · 3.4k tokens)${RESET}`,
+];
+
+/** Every tick: one working Pane produces output, and sometimes a Status moves on. */
+function tick(s: Store): void {
+  const busy = pick(s.state.panes.filter((p) => p.status === 'working'));
+  if (busy) append(s, busy.key, pick(LOG) ?? '');
+  if (Math.random() < 0.3) {
+    const mover = pick(s.state.panes.filter((p) => p.status === 'working' || p.status === 'idle'));
+    if (mover) {
+      mover.status = mover.status === 'working' ? 'done' : 'working';
+      if (mover.status === 'done') mover.revision += 1;
+    }
+  }
+  for (const es of sources) es.push(s, { state: true, screenKey: busy?.key });
+}
+
+class MockEventSource extends EventTarget {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
+  readonly url: string;
+  readonly withCredentials = false;
+  readyState = 0;
+  onopen: ((e: Event) => void) | null = null;
+  onmessage: ((e: MessageEvent<string>) => void) | null = null;
+  onerror: ((e: Event) => void) | null = null;
+  readonly paneKey?: string;
+  readonly mode: ScreenMode;
+
+  constructor(url: string | URL) {
+    super();
+    this.url = String(url);
+    const params = new URL(this.url, location.origin).searchParams;
+    this.paneKey = params.get('pane') ?? undefined;
+    this.mode = params.get('mode') === 'recent' ? 'recent' : 'visible';
+    setTimeout(() => {
+      if (this.readyState !== 0 || !store) return;
+      this.readyState = 1;
+      sources.add(this);
+      this.onopen?.(new Event('open'));
+      this.push(store, { state: true, screenKey: this.paneKey });
+    }, 120);
+  }
+
+  /** Send what this stream watches: always `state`, plus `screen` when its Pane changed. */
+  push(s: Store, what: { state?: boolean; screenKey?: string }): void {
+    if (this.readyState !== 1) return;
+    const send = (name: string, data: unknown) =>
+      this.dispatchEvent(new MessageEvent(name, { data: JSON.stringify(data) }));
+    if (what.state) send('state', s.state);
+    if (this.paneKey && what.screenKey === this.paneKey) {
+      const screen = s.screens[this.paneKey]?.[this.mode];
+      if (screen) send('screen', { ...screen, key: this.paneKey } satisfies ScreenEvent);
+    }
+  }
+
+  close(): void {
+    this.readyState = 2;
+    sources.delete(this);
+  }
+}
+
+const json = (value: unknown, status = 200) => Response.json(value, { status });
+const noContent = () => new Response(null, { status: 204 });
+
+async function readBody(input: RequestInfo | URL, init?: RequestInit): Promise<unknown> {
+  try {
+    if (init?.body) return JSON.parse(String(init.body));
+    if (input instanceof Request) return await input.clone().json();
+  } catch { /* an unparseable body is simply no body */ }
+  return undefined;
+}
+
+function route(s: Store, url: URL, method: string, body: unknown): Response | undefined {
+  if (method === 'GET' && url.pathname === '/api/state') return json(s.state);
+  if (url.pathname === '/api/settings') {
+    if (method === 'GET') return json(s.settings);
+    if (method === 'PUT') { Object.assign(s.settings, body as object); return json(s.settings); }
+  }
+  if (method === 'POST' && url.pathname.startsWith('/api/push/')) return json({ ok: true });
+
+  const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain)$/);
+  if (!match) return undefined;
+  let key: string;
+  try { key = decodeURIComponent(match[1]!); } catch { return json({ error: 'bad pane key' }, 400); }
+  const pane = s.state.panes.find((p) => p.key === key);
+  if (!pane) return json({ error: 'pane not found' }, 404);
+
+  if (method === 'GET' && match[2] === 'screen') {
+    const mode: ScreenMode = url.searchParams.get('mode') === 'recent' ? 'recent' : 'visible';
+    return json(s.screens[key]![mode]);
+  }
+  if (method === 'GET' && match[2] === 'explain') return json(mockExplains[key] ?? null);
+  if (method === 'POST' && match[2] === 'input') {
+    input(s, key, (body ?? {}) as InputBody);
+    for (const es of sources) es.push(s, { state: true, screenKey: key });
+    return noContent();
+  }
+  if (method === 'POST' && match[2] === 'seen') {
+    pane.seenRevision = (body as SeenBody | undefined)?.revision ?? pane.revision;
+    for (const es of sources) es.push(s, { state: true });
+    return noContent();
+  }
+  return undefined;
+}
+
+/** Serve the Hub API from memory when the page is opened with `?mock`. */
+export function installMock(): void {
+  if (installed) return;
+  if (!location.search.includes('mock') && meta('VITE_MOCK') !== '1') return;
+  installed = true;
+  if (meta('DEV') !== false) assertMockInvariants();
+
+  const s: Store = {
+    state: structuredClone(mockState),
+    screens: structuredClone(mockScreens),
+    settings: { pushEnabled: false, trustedUser: '' },
+  };
+  store = s;
+
+  const original = window.fetch.bind(window);
+  const patched = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const href = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const url = new URL(href, location.origin);
+    if (!url.pathname.startsWith('/api/')) return original(input, init);
+    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    const response = route(s, url, method, await readBody(input, init));
+    await sleep(80 + Math.random() * 120); // slow enough to see the loading states
+    return response ?? json({ error: 'not found' }, 404);
+  };
+  // The cast drops Bun's `fetch.preconnect`, which no browser has anyway.
+  window.fetch = patched as typeof window.fetch;
+
+  window.EventSource = MockEventSource as unknown as typeof EventSource;
+  setInterval(() => tick(s), 2500);
+}
