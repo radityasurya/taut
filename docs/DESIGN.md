@@ -19,8 +19,8 @@ glyph. A floating tab bar carries the three root destinations and hides while yo
 | Screen | Mockup | What it shows |
 |---|---|---|
 | Agents · Mocha | ![Home](design/home-mocha.png) | Needs-you section, collapsible Workspace groups with Host suffix and a summary when collapsed, offline Host row, floating tab bar with badge |
-| Pane · Claude blocked | ![Pane agent](design/pane-agent.png) | Top bar: back, title, status line (tap opens Switch), actions Switch · read aloud · more. Wrap and Fit toggles. Grid with right-edge fade. Blocked card floating above the dock. Bottom dock: Tab strip (one underlined tab per Tab of the Workspace, status dot, Pane count when >1) with + for a new Tab, key bar, composer as the agent's prompt |
-| Pane · shell | ![Pane shell](design/pane-shell.png) | htop with Fit on, same top bar and dock, shell key bar, no composer |
+| Pane · Claude blocked | ![Pane agent](design/pane-agent.png) | Top bar: back, title, status line (tap opens Switch), actions Switch · read aloud · more (Wrap, Rename, Close). Tab strip under it: one underlined tab per Tab of the Workspace, status dot, Pane count when >1, + for a new Tab, Fit chip at the right. Grid with right-edge fade. Blocked card floating above the dock. Bottom dock: key bar and composer as the agent's prompt |
+| Pane · shell | ![Pane shell](design/pane-shell.png) | htop with Fit on, same top bar and Tab strip, shell key bar in the dock, no composer |
 | Hosts | ![Hosts](design/hosts.png) | One card per Host: state, Muxes with Pane counts, error with Retry, Add Host |
 | Switch drawer | ![Switch](design/switch.png) | From any Pane: search, Host chips, every Workspace with its Panes under their Tab labels. Two taps to any Pane on any Host |
 | Settings | ![Settings](design/settings.png) | Theme chips, Hosts summary, push and haptics toggles, iOS install hint, access rows |
@@ -33,17 +33,17 @@ The Pane screen is two bars and a grid between them.
 
 | Bar | Contents | Behaviour |
 |---|---|---|
-| Top bar | 44 px back chevron · title · status line "● status · agent · workspace ⌄" · actions: Switch (grid icon), read aloud (speaker), more (⋯) | Status line tap opens the Switch drawer. More holds Rename, Close Pane, Resize to phone (v2) |
-| Toggle row | Wrap · Fit (label = grid size) | Client-side only |
+| Top bar | 44 px back chevron · title · status line "● status · agent · workspace ⌄" · actions: Switch (grid icon), read aloud (speaker), more (⋯) | Status line tap opens the Switch drawer. More holds Wrap, Rename, Close Pane, Resize to phone (v2) |
+| Tab strip | Directly under the top bar, browser-tab position: one tab per Tab of the Workspace with status dot, label, Pane count when the Tab holds several; active tab underlined in accent; + creates a Tab; Fit chip (label = grid size) at the right end | Tap switches Tab; swipe on the strip too. When the active Tab holds several Panes a row of small Pane pills appears under the strip |
 | Blocked card | floats above the dock, `--elevated`, 1 px hairline | Only while Status is `blocked` |
-| Bottom dock | `--elevated`, 16 px top radius. Row 1: **Tab strip**, one tab per Tab of the Workspace: status dot, label, Pane count when the Tab holds more than one; active tab underlined in accent; + at the end creates a Tab. When the active Tab holds several Panes, a second row of small Pane pills appears under the strip. Row 2: key bar. Row 3: composer, agent Panes only | Keyboard pushes the dock up; swipe on the strip switches Tab; tabs, not pills, because a strip reads as navigation and pills read as filters |
+| Bottom dock | `--elevated`, 16 px top radius. Key bar, then the composer on agent Panes | Keyboard pushes the dock up; kept to two rows so the grid keeps its height while typing |
 
 ## Creating things
 
 | Action | Where | Result |
 |---|---|---|
 | New Workspace | + in the Agents header → New Workspace drawer (directory, label, worktree branch) | herdr `workspace.create` / `worktree.create` |
-| New Tab | + at the end of the Pane's Tab strip, or long-press a Workspace header → New Tab drawer (label, directory, start agent) | herdr `tab.create` makes the Tab with one root Pane; the drawer optionally starts an agent in it |
+| New Tab | + at the end of the Tab strip under the Pane's top bar, or long-press a Workspace header → New Tab drawer (label, directory, start agent) | herdr `tab.create` makes the Tab with one root Pane; the drawer optionally starts an agent in it |
 | Rename, Close | ⋯ in the Pane top bar; long-press a row on the Agents screen | Drawer / Dialog |
 
 A Tab is never its own screen: on the phone it is an entry in the Pane's Tab strip and a label
@@ -55,8 +55,8 @@ in the Switch drawer. A Tab with one Pane opens straight to that Pane.
 |---|---|---|
 | Hosts | Agents tab: Host chips under the header filter the list. Hosts tab: cards | tap |
 | Workspaces | Agents tab: collapsible groups, state remembered. From a Pane: tap the subtitle to open the Switch drawer | tap |
-| Tabs | The Tab strip in the Pane's bottom dock; the Switch drawer shows the same grouping | tap tab, swipe |
-| Agents and shells | Tabs in the strip; Pane pills under the strip when a Tab holds several; swipe on the dock (never on the grid) | tap, swipe |
+| Tabs | The Tab strip under the Pane's top bar; the Switch drawer shows the same grouping | tap tab, swipe |
+| Agents and shells | Tabs in the strip; Pane pills under the strip when a Tab holds several; swipe on the strip or the dock (never on the grid) | tap, swipe |
 
 ## Terminal width on a phone
 
@@ -81,7 +81,7 @@ The grid is what the multiplexer rendered at the server's size. Three answers, i
 | Accent | primary button, current chip or tab, `working`, focus ring. Nothing else |
 | Radius | 8 px chips, buttons and key caps; 10 px composer; 12 px cards and the blocked card; 14 px tab bar; 16 px drawer top. Dots stay circles. No pills |
 | Type | caption 12/1.35 · body 15/1.45 · title 17/1.25 600 · mono 12/1.35 |
-| Grid | scrolled by default, right-edge fade while it overflows; Wrap toggle reflows, Fit toggle scales the `<pre>` |
+| Grid | scrolled by default, right-edge fade while it overflows; Fit chip scales the `<pre>`; Wrap (in ⋯) reflows |
 | Key bar | agent: `esc ↑ ↓ tab shift+tab enter ctrl+c` · shell: `esc tab ↑ ↓ ← → enter ctrl+c ctrl+d` |
 | Composer | 12 px label with the agent's glyph, placeholder in the agent's voice, mic replaces send while empty |
 | Blocked card | sticky above the key bar, `--elevated`, title + rule id, one-line detection excerpt, Yes/No preset then hint keys |
