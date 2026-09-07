@@ -19,13 +19,35 @@ glyph. A floating tab bar carries the three root destinations and hides while yo
 | Screen | Mockup | What it shows |
 |---|---|---|
 | Agents · Mocha | ![Home](design/home-mocha.png) | Needs-you section, collapsible Workspace groups with Host suffix and a summary when collapsed, offline Host row, floating tab bar with badge |
-| Pane · Claude blocked | ![Pane agent](design/pane-agent.png) | Header with status word, Wrap and fit toggles, chip row of every Pane in the Workspace (agents first, then shells), grid with right-edge fade, sticky blocked card (Yes/No/↑/↓), agent key bar, composer as the agent's prompt |
-| Pane · shell | ![Pane shell](design/pane-shell.png) | htop with fit-width on, shell key bar, no composer chrome |
+| Pane · Claude blocked | ![Pane agent](design/pane-agent.png) | Top bar: back, title, status line (tap opens Switch), actions Switch · read aloud · more. Wrap and Fit toggles. Grid with right-edge fade. Blocked card floating above the dock. Bottom dock: ‹ chip row of every Pane in the Workspace under Tab labels › and a + for a new Tab, key bar, composer as the agent's prompt |
+| Pane · shell | ![Pane shell](design/pane-shell.png) | htop with Fit on, same top bar and dock, shell key bar, no composer |
 | Hosts | ![Hosts](design/hosts.png) | One card per Host: state, Muxes with Pane counts, error with Retry, Add Host |
 | Switch drawer | ![Switch](design/switch.png) | From any Pane: search, Host chips, every Workspace with its Panes under their Tab labels. Two taps to any Pane on any Host |
 | Settings | ![Settings](design/settings.png) | Theme chips, Hosts summary, push and haptics toggles, iOS install hint, access rows |
 | Agents · Latte | ![Home Latte](design/home-latte.png) | Same structure in the light Catppuccin theme, with the corrected muted color |
 | New Tab drawer | ![New Tab](design/sheet-new-tab.png) | Drawer (vaul) with label, directory, agent chips, one primary action |
+
+## Pane top bar and bottom dock
+
+The Pane screen is two bars and a grid between them.
+
+| Bar | Contents | Behaviour |
+|---|---|---|
+| Top bar | 44 px back chevron · title · status line "● status · agent · workspace ⌄" · actions: Switch (grid icon), read aloud (speaker), more (⋯) | Status line tap opens the Switch drawer. More holds Rename, Close Pane, Resize to phone (v2) |
+| Toggle row | Wrap · Fit (label = grid size) | Client-side only |
+| Blocked card | floats above the dock, `--elevated`, 1 px hairline | Only while Status is `blocked` |
+| Bottom dock | `--elevated`, 16 px top radius. Row 1: ‹ chips › + (chips are every Pane in the Workspace under their Tab labels; + creates a Tab). Row 2: key bar. Row 3: composer, agent Panes only | Keyboard pushes the dock up; swipe on the dock's chip row switches Pane; ‹ › step to the neighbour |
+
+## Creating things
+
+| Action | Where | Result |
+|---|---|---|
+| New Workspace | + in the Agents header → New Workspace drawer (directory, label, worktree branch) | herdr `workspace.create` / `worktree.create` |
+| New Tab | + at the end of a Pane's chip row, or long-press a Workspace header → New Tab drawer (label, directory, start agent) | herdr `tab.create` makes the Tab with one root Pane; the drawer optionally starts an agent in it |
+| Rename, Close | ⋯ in the Pane top bar; long-press a row on the Agents screen | Drawer / Dialog |
+
+A Tab is never shown as its own screen: on the phone it is the label above its Panes in the
+chip row and in the Switch drawer. A Tab with one Pane looks like that Pane.
 
 ## Switching at every level
 
