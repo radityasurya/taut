@@ -6,8 +6,9 @@ Thanks for helping. taut is small and opinionated; this page tells you how to fi
 
 1. Install [Bun](https://bun.sh) 1.2+ and [pnpm](https://pnpm.io).
 2. Install [herdr](https://herdr.dev) and start a session. tmux is optional.
-3. Run `pnpm install`, then `pnpm dev`.
-4. To test on a phone, run `tailscale serve --bg 5173` and open the tailnet URL.
+3. Run `make dev`. It installs dependencies on first run, frees the ports, starts the Hub
+   and Vite, maps `tailscale serve`, and prints the local and tailnet URLs.
+4. Open the tailnet URL on the phone. `make stop` cleans up.
 
 ## Before you write code
 
@@ -31,9 +32,8 @@ Thanks for helping. taut is small and opinionated; this page tells you how to fi
 Run these before opening a pull request; CI runs the same:
 
 ```sh
-pnpm test        # bun test: unit and contract tests
-pnpm typecheck
-pnpm build
+make test        # bun test: unit and contract tests
+make check       # typecheck + build
 ```
 
 Contract tests need `herdr` and `tmux` on PATH; they skip when a binary is missing.

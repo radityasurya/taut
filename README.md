@@ -45,16 +45,12 @@ for the vocabulary.
 Requires [Bun](https://bun.sh) 1.2+, pnpm, and a running herdr.
 
 ```sh
-pnpm install
-pnpm dev            # Hub on 127.0.0.1:7700, Vite on 127.0.0.1:5173
-tailscale serve --bg 5173   # then open https://<hub>.<tailnet>.ts.net on the phone
+make dev     # frees the ports, starts Hub + Vite, maps tailscale serve, prints the URLs
+make stop    # kills leftovers and removes the tailscale serve mapping
+make help    # everything else: install, test, check, build
 ```
 
-```sh
-pnpm test           # bun test
-pnpm typecheck
-pnpm build          # web app to dist/web
-```
+`make dev` prints a local URL and a tailnet URL; open the tailnet one on the phone.
 
 ## License
 

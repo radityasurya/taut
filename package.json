@@ -8,7 +8,7 @@
   "files": ["server", "shared", "dist/web", "README.md", "LICENSE"],
   "engines": { "bun": ">=1.2" },
   "scripts": {
-    "dev": "bun --watch server/main.ts & vite; kill %1",
+    "dev": "make dev",
     "dev:server": "bun --watch server/main.ts",
     "dev:web": "vite",
     "build": "vite build",
