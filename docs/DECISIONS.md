@@ -34,6 +34,7 @@ This is the record. The two irreversible choices also have ADRs in [adr/](./adr/
 | Runtime | Bun end to end, pnpm, Vite + React + Tailwind v4, `bun test` | No build step for the server; `bunx taut` |
 | Packaging | npm package plus Docker image (`oven/bun`) | Unraid runs containers; VPS runs a unit |
 | Tests | Contract suite over both adapters against real binaries on throwaway sockets | The adapter's whole job is talking to a real binary |
+| Diff viewer (recon 2026-09-08) | Render `git diff` from the Workspace cwd with `gitdiff-parser` + `react-diff-view`; do not embed hunk | hunk (modem-dev/hunk, MIT, 9k★) is a terminal renderer with no web or JSON output; mirroring its TUI is no better than opening its pane. The herdr-hunk-diff plugin only orchestrates hunk inside a pane |
 
 ## Vocabulary
 

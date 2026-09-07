@@ -96,7 +96,21 @@ Verify: tmux Panes show Status `unknown`; read and send work.
 
 Verify: start `claude` in a new Tab from the phone.
 
-## Phase 8 — ship
+## Phase 8 — diff review
+
+- [ ] Hub runs `git diff --no-color -U3` (working tree, `--staged`, and base…HEAD with the
+      base resolved like herdr-hunk-diff: upstream → `origin/HEAD` → main/master) in the
+      Workspace cwd, local or over SSH; `GET /api/workspaces/:key/diff?scope=`
+- [ ] PWA renders it with `gitdiff-parser` + `react-diff-view` (MIT), unified view on the
+      phone, per-file collapse, hunk headers; opened from the Pane's ⋯ menu and the Workspace
+      long-press menu
+- [ ] hunk itself is a TUI with no web or JSON mode, so it is not embedded; a hunk pane still
+      opens like any other Pane
+
+Verify: after an agent edits files, open Diff from the Pane; hunks render with syntax-free
+coloring; staged and unstaged scopes switch.
+
+## Phase 9 — ship
 
 - [ ] `Dockerfile` (`oven/bun`), README install paths (`bunx taut`, systemd, Docker on Unraid)
 - [ ] `npm publish`
