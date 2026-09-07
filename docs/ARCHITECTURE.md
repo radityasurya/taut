@@ -3,12 +3,74 @@
 taut is a **Hub** (a Bun process) plus a **PWA**. The Hub talks to multiplexers; the PWA
 talks only to the Hub. Vocabulary is in [../CONTEXT.md](../CONTEXT.md).
 
+```mermaid
+flowchart LR
+    phone["📱 Phone<br/>PWA in the browser"]
+    ts["Tailscale<br/>tailscale serve · HTTPS · identity header"]
+
+    subgraph hub_host["Host A — always on (VPS)"]
+        hub["Hub<br/>bun server/main.ts · 127.0.0.1:7700"]
+        herdrA["herdr<br/>unix socket"]
+        tmuxA["tmux<br/>unix socket"]
+    end
+
+    subgraph host_b["Host B (Unraid, desktop, …)"]
+        sshd["sshd"]
+        herdrB["herdr<br/>unix socket"]
+        tmuxB["tmux"]
+    end
+
+    phone -- "SSE down · POST up" --> ts --> hub
+    hub -- "JSON lines" --> herdrA
+    hub -- "tmux -S …" --> tmuxA
+    hub -- "ssh -L local.sock:remote.sock" --> sshd --> herdrB
+    hub -- "ssh host tmux …" --> sshd --> tmuxB
 ```
-phone (PWA) ──HTTPS via tailscale serve──▶ Hub (127.0.0.1:7700)
-                                            ├─ herdr adapter ──unix socket──▶ herdr (local)
-                                            ├─ herdr adapter ──local sock◀─ssh -L─▶ herdr (remote Host)
-                                            └─ tmux adapter  ──tmux -S / ssh tmux──▶ tmux
+
+One **Hub** per always-on Host. Remote Hosts need only `sshd` and the multiplexer; the Hub
+uses the Hub user's own SSH configuration. The phone has one origin, one service worker,
+one push subscription.
+
+### What the phone sees
+
+```mermaid
+flowchart TB
+    Host --> Mux["Mux<br/>herdr session · tmux server"]
+    Mux --> Workspace["Workspace<br/>herdr workspace · tmux session"]
+    Workspace --> Tab["Tab<br/>herdr tab · tmux window"]
+    Tab --> Pane
+    Pane -. "may have" .-> Agent["Agent<br/>Status: idle · working · blocked · done · unknown"]
+    Pane -. "taut adds" .-> Seen["Seen<br/>phone displayed it since the last Status change"]
 ```
+
+Home flattens this to one list of Panes grouped by Workspace, unseen `blocked` first.
+
+### How a screen stays live
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Phone
+    participant H as Hub
+    participant M as herdr (Mux)
+
+    P->>H: GET /api/events?pane=w1/p3  (SSE)
+    H->>M: events.subscribe (long-lived connection)
+    H->>M: session.snapshot
+    M-->>H: workspaces, tabs, panes, status
+    H-->>P: event: state
+    loop agent produces output
+        M-->>H: pane_updated {pane_id, revision, agent_status}
+        Note over H: debounce 150 ms per Pane
+        H->>M: pane.read {source: visible, format: ansi}
+        M-->>H: rendered grid
+        H-->>P: event: screen
+    end
+    P->>H: POST /api/panes/w1/p3/input {text, keys}
+    H->>M: pane.send_text · pane.send_keys
+    Note over H: Status → blocked triggers a push (phase 3)
+```
+
 
 ## Facts the design depends on
 

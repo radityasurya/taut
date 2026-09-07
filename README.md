@@ -20,6 +20,21 @@ One **Hub** runs on the machine that is always on. It talks to herdr over its un
 and reaches other machines over SSH. Your phone talks only to the Hub, through
 `tailscale serve`, so there is no login screen and nothing is exposed to the internet.
 
+```mermaid
+flowchart LR
+    phone["📱 Phone (PWA)"] -- "HTTPS via Tailscale" --> hub
+
+    subgraph a["Always-on machine"]
+        hub["Hub"] --> herdrA["herdr"]
+        hub --> tmuxA["tmux"]
+    end
+
+    subgraph b["Other machines"]
+        hub -- "ssh" --> herdrB["herdr"]
+        hub -- "ssh" --> tmuxB["tmux"]
+    end
+```
+
 Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and
 [CONTEXT.md](CONTEXT.md) for the vocabulary.
 
