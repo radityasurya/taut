@@ -88,6 +88,53 @@ sequenceDiagram
   included. taut builds tap-to-answer buttons from these; it has no per-agent grammars.
 - tmux: `list-panes -a -F`, `capture-pane -e -p`, `send-keys -l`. No events; taut polls.
 
+### Status and Seen
+
+Status comes from the Mux. Seen is taut's own layer on top; it decides sort order and badges.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> unknown: Agent detected
+    unknown --> working
+    working --> blocked: prompt or approval shown
+    blocked --> working: answered
+    working --> done: finished, tab not focused in herdr
+    working --> idle: finished, tab focused in herdr
+    done --> idle: herdr client focuses the tab
+    idle --> working: new prompt
+
+    note right of blocked
+        Push notification fires on entry.
+        Unseen blocked sorts first on Home.
+    end note
+    note right of done
+        Badge, no push.
+        Opening the Pane on the phone marks it Seen;
+        herdr still reports done until the desktop looks.
+    end note
+```
+
+### Blocked → tap-to-answer
+
+taut writes no prompt grammars. herdr classifies the screen; taut turns that into buttons.
+
+```mermaid
+flowchart LR
+    ev["pane_updated<br/>agent_status: blocked"] --> ex["agent.explain<br/>matched_rule.id"]
+    ev --> det["pane.read<br/>source: detection"]
+    ex --> preset{"rule id<br/>contains<br/>permission?"}
+    preset -- yes --> yn["Yes → enter<br/>No → esc"]
+    det --> hints["footer hint line<br/>'esc to cancel · enter to confirm'"]
+    hints --> regex["key to verb<br/>→ one button per named key"]
+    yn --> card["Blocked card:<br/>detection text + buttons"]
+    regex --> card
+    card -- tap --> send["pane.send_keys"]
+```
+
+Digits become buttons only when the footer names them; a numbered list is answered with the
+arrow keys and Enter, which every prompt announces.
+
 ## Backend interface
 
 One interface, two implementations (`shared/types.ts`, `Mux`). herdr implements everything;

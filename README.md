@@ -35,8 +35,10 @@ flowchart LR
     end
 ```
 
-Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and
-[CONTEXT.md](CONTEXT.md) for the vocabulary.
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design,
+[docs/SECURITY.md](docs/SECURITY.md) before exposing a Hub, [docs/DECISIONS.md](docs/DECISIONS.md)
+for why it is built this way and why it is not a collie fork, and [CONTEXT.md](CONTEXT.md)
+for the vocabulary.
 
 ## Development
 
