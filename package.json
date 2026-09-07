@@ -1,0 +1,34 @@
+{
+  "name": "taut",
+  "version": "0.1.0",
+  "description": "Mobile-first PWA hub for herdr (and tmux): see every coding agent's state from your phone and reply, over Tailscale.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "taut": "server/main.ts" },
+  "files": ["server", "shared", "dist/web", "README.md", "LICENSE"],
+  "engines": { "bun": ">=1.2" },
+  "scripts": {
+    "dev": "bun --watch server/main.ts & vite; kill %1",
+    "dev:server": "bun --watch server/main.ts",
+    "dev:web": "vite",
+    "build": "vite build",
+    "start": "bun server/main.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/bun": "^1.2.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.3.0"
+  },
+  "packageManager": "pnpm@11.25.0"
+}
