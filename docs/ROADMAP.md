@@ -4,6 +4,29 @@ Each phase is a tracer bullet: it ships something you can use from the phone, en
 Tick a box when the verification step passes on a real device. Details of the design live
 in [ARCHITECTURE.md](./ARCHITECTURE.md); vocabulary in [../CONTEXT.md](../CONTEXT.md).
 
+## Phase 0 — UI skeletons (every screen, mock data, no Hub)
+
+Goal: walk the whole app on the phone and judge the look and the interaction model before
+anything is wired. Later phases replace mock data with real calls; the screens stay.
+
+- [ ] `web/mock.ts`: one fixture set covering every state: two Hosts, herdr and tmux Muxes,
+      Panes in all five Statuses, seen and unseen, a blocked Pane with a permission prompt
+      and hint keys, an offline Host, an empty Workspace
+- [ ] `?mock` in the URL (or `VITE_MOCK=1`) swaps the API layer for fixtures; SSE simulated
+      with a timer so screens "tick"
+- [ ] Home: grouped list, status dots, unseen emphasis, host chips, empty state, offline banner
+- [ ] Pane: grid view, recent view, blocked card with buttons, key bar, composer with mic,
+      attach and send, read-aloud button, swipe between Panes
+- [ ] Settings: theme picker (all six + system), hosts list and add-host sheet, push toggle,
+      "add to Home Screen" hint, trusted login field
+- [ ] Sheets: new Tab, new Workspace / worktree, rename, close confirm
+- [ ] PWA shell: manifest, icons, standalone display, safe-area insets
+
+Verify: open `https://<hub>:5173/?mock` on iPhone and Android; walk every screen in all
+six themes; nothing needs a running herdr.
+
+Built after phase 1 lands (phase 1 was started first); reuses its Home, Pane and theme code.
+
 ## Phase 1 — see and reply to a local herdr Pane
 
 - [x] Glossary (`CONTEXT.md`), ADRs 0001 and 0002

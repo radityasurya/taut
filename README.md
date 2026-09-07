@@ -3,7 +3,7 @@
 See every coding agent running in your terminal multiplexers, from your phone. Reply,
 approve, attach a photo, dictate a prompt. Works over Tailscale as an installable PWA.
 
-> Status: pre-alpha, phase 1 of 8. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> Status: pre-alpha. Phase 1 (wire a local herdr) is in progress; phase 0 (all screens on mock data) follows. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## What it does
 
