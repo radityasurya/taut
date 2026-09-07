@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin:0; background:#1e1e2e; color:#cdd6f4; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; font-size:15px; line-height:1.45; -webkit-font-smoothing:antialiased; }
+    a { color:#cba6f7; } a:hover { color:#cdd6f4; }
+    .caps { font-size:11px; line-height:1; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#a6adc8; }
+    .mono { font-family:ui-monospace,SFMono-Regular,Menlo,"DejaVu Sans Mono",monospace; }
+    .card { border-radius:12px; background:#313244; padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+    .mux { display:flex; align-items:center; gap:10px; font-size:13px; color:#a6adc8; }
+  </style>
+</helmet>
+<div style="width:390px; height:844px; position:relative; overflow:hidden; background:#1e1e2e; display:flex; flex-direction:column;">
+  <div style="height:54px; flex-shrink:0;"></div>
+  <div style="display:flex; align-items:center; justify-content:space-between; height:44px; padding:0 16px;">
+    <div style="font-size:17px; font-weight:600; letter-spacing:-0.01em;">Hosts</div>
+    <div style="font-size:12px; color:#a6adc8;">hub · mbp</div>
+  </div>
+
+  <div style="flex:1; overflow:hidden; display:flex; flex-direction:column; gap:12px; padding:8px 16px 110px;">
+    <div class="card">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="width:8px; height:8px; border-radius:9999px; background:#a6e3a1;"></span>
+        <div style="font-weight:600;">mbp</div>
+        <div style="font-size:12px; color:#a6adc8;">this machine</div>
+        <div style="margin-left:auto; font-size:12px; color:#a6adc8; font-variant-numeric:tabular-nums;">9 panes</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <div class="mux"><span class="mono" style="color:#cdd6f4;">herdr</span><span>default</span><span style="margin-left:auto; font-variant-numeric:tabular-nums;">7 panes · 1 blocked</span></div>
+        <div class="mux"><span class="mono" style="color:#cdd6f4;">tmux</span><span>admin</span><span style="margin-left:auto; font-variant-numeric:tabular-nums;">2 panes</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="width:8px; height:8px; border-radius:9999px; background:#f38ba8;"></span>
+        <div style="font-weight:600;">vps</div>
+        <div class="mono" style="font-size:12px; color:#a6adc8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">dev@vps.example.ts.net</div>
+      </div>
+      <div style="font-size:13px; color:#f38ba8;">ssh: connect timed out · retrying in 20 s</div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div style="height:36px; padding:0 14px; border-radius:8px; background:#1e1e2e; border:1px solid #45475a; display:flex; align-items:center; font-size:13px; font-weight:500;">Retry now</div>
+        <div style="height:36px; padding:0 14px; border-radius:8px; display:flex; align-items:center; font-size:13px; color:#a6adc8;">Edit</div>
+        <div style="margin-left:auto; font-size:12px; color:#585b70;">from herdr machine list</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="width:8px; height:8px; border-radius:9999px; background:#a6e3a1;"></span>
+        <div style="font-weight:600;">unraid</div>
+        <div class="mono" style="font-size:12px; color:#a6adc8;">root@unraid</div>
+        <div style="margin-left:auto; font-size:12px; color:#a6adc8; font-variant-numeric:tabular-nums;">3 panes</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <div class="mux"><span class="mono" style="color:#cdd6f4;">tmux</span><span>main</span><span style="margin-left:auto; font-variant-numeric:tabular-nums;">3 panes</span></div>
+      </div>
+    </div>
+
+    <div style="border-radius:12px; border:1px dashed #45475a; padding:14px 16px; display:flex; align-items:center; gap:10px; color:#cba6f7; font-weight:500;">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Add Host
+      <span style="margin-left:auto; font-size:12px; color:#585b70; font-weight:400;">ssh target · herdr or tmux</span>
+    </div>
+  </div>
+
+  <div style="position:absolute; left:12px; right:12px; bottom:42px; height:52px; border-radius:14px; background:rgba(49,50,68,.88); border:1px solid rgba(88,91,112,.5); box-shadow:0 8px 24px rgba(0,0,0,.35); display:flex; align-items:center; justify-content:space-around; padding:0 8px;">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:2px; width:88px; color:#a6adc8; position:relative;">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+      <span style="font-size:10px; font-weight:500; letter-spacing:.02em;">Agents</span>
+      <span style="position:absolute; top:-3px; right:22px; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:#fab387; color:#1e1e2e; font-size:10px; font-weight:700; line-height:16px; text-align:center;">1</span>
+    </div>
+    <div style="display:flex; flex-direction:column; align-items:center; gap:2px; width:88px; color:#cba6f7;">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="5" width="16" height="6" rx="1.5"/><rect x="4" y="13" width="16" height="6" rx="1.5"/><path d="M7.5 8h.01M7.5 16h.01"/></svg>
+      <span style="font-size:10px; font-weight:600; letter-spacing:.02em;">Hosts</span>
+    </div>
+    <div style="display:flex; flex-direction:column; align-items:center; gap:2px; width:88px; color:#a6adc8;">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg>
+      <span style="font-size:10px; font-weight:500; letter-spacing:.02em;">Settings</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

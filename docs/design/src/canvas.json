@@ -47,22 +47,38 @@
       "y": 1000,
       "w": 390,
       "h": 844
+    },
+    {
+      "file": "Hosts.dc.html",
+      "title": "Hosts",
+      "x": 960,
+      "y": 1000,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Switch.dc.html",
+      "title": "Switch drawer (any Host \u00b7 Space \u00b7 Tab \u00b7 Pane)",
+      "x": 1440,
+      "y": 1000,
+      "w": 390,
+      "h": 844
     }
   ],
   "annotations": [
     {
       "id": "direction",
-      "x": 960,
+      "x": 1920,
       "y": 1000,
       "w": 420,
-      "text": "Direction: Linear/Notion density, one accent (Catppuccin Mocha shown; Latte twin bottom-left).\n\nHome: pinned 'Needs you' above Workspace groups. Dot filled = unseen, hollow ring = seen. Line 2 = blocked reason / last screen line. Right = time since status change.\n\nPane: agent chip row (swipe lives here, not on the grid), sticky blocked card built from herdr's detection, key bar ordered by frequency, composer labelled with the agent's glyph. Shell panes get the grid + shell key set only.\n\nFloating tab bar on the three root routes; hides while the composer has focus. Real status bar and keyboard are left blank on purpose."
+      "text": "Direction: Linear/Notion density, one accent (Catppuccin Mocha shown; Latte twin bottom-left).\n\nHome: pinned 'Needs you' above Workspace groups. Dot filled = unseen, hollow ring = seen. Line 2 = blocked reason / last screen line. Right = time since status change.\n\nPane: agent chip row (swipe lives here, not on the grid), sticky blocked card built from herdr's detection, key bar ordered by frequency, composer labelled with the agent's glyph. Shell panes get the grid + shell key set only.\n\nFloating tab bar on the three root routes; hides while the composer has focus. Real status bar and keyboard are left blank on purpose.\n\nRound 2 feedback applied: softer radii (8 px chips, 14 px tab bar), tab renamed Agents, collapsible Workspace groups with a summary, Hosts as cards, chip row lists every Pane in the Workspace (agents first, then shells)."
     },
     {
       "id": "todo",
-      "x": 960,
+      "x": 1920,
       "y": 1330,
       "w": 420,
-      "text": "Open questions for review:\n1. Chip row: show for one Agent too, or only when \u22652?\n2. Blocked card: collapsible to one line by default, or open?\n3. Theme chips vs a full list in Settings.\n4. '120\u00d748' toggle label: grid size or the word 'Fit'?"
+      "text": "Open questions:\n1. Call a Workspace a 'Space' in the UI?\n2. Blocked card: open by default, or collapsed to one line?\n3. Theme chips vs a full list.\n4. Grid toggle label: size or 'Fit'?"
     }
   ],
   "launch": {

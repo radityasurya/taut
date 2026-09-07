@@ -18,12 +18,31 @@ glyph. A floating tab bar carries the three root destinations and hides while yo
 
 | Screen | Mockup | What it shows |
 |---|---|---|
-| Home · Mocha | ![Home](design/home-mocha.png) | Needs-you section, Workspace groups with Host suffix, offline Host row, floating tab bar with badge |
-| Pane · Claude blocked | ![Pane agent](design/pane-agent.png) | Header with status word, Screen/Recent segmented control, grid-size toggle, agent chip row, grid with right-edge fade, sticky blocked card (Yes/No/↑/↓), agent key bar, composer as the agent's prompt |
+| Agents · Mocha | ![Home](design/home-mocha.png) | Needs-you section, collapsible Workspace groups with Host suffix and a summary when collapsed, offline Host row, floating tab bar with badge |
+| Pane · Claude blocked | ![Pane agent](design/pane-agent.png) | Header with status word, Wrap and fit toggles, chip row of every Pane in the Workspace (agents first, then shells), grid with right-edge fade, sticky blocked card (Yes/No/↑/↓), agent key bar, composer as the agent's prompt |
 | Pane · shell | ![Pane shell](design/pane-shell.png) | htop with fit-width on, shell key bar, no composer chrome |
-| Settings | ![Settings](design/settings.png) | Theme chips, Hosts with online state and error, push and haptics toggles, iOS install hint, access rows |
-| Home · Latte | ![Home Latte](design/home-latte.png) | Same structure in the light Catppuccin theme, with the corrected muted color |
+| Hosts | ![Hosts](design/hosts.png) | One card per Host: state, Muxes with Pane counts, error with Retry, Add Host |
+| Switch drawer | ![Switch](design/switch.png) | From any Pane: search, Host chips, every Workspace with its Panes under their Tab labels. Two taps to any Pane on any Host |
+| Settings | ![Settings](design/settings.png) | Theme chips, Hosts summary, push and haptics toggles, iOS install hint, access rows |
+| Agents · Latte | ![Home Latte](design/home-latte.png) | Same structure in the light Catppuccin theme, with the corrected muted color |
 | New Tab drawer | ![New Tab](design/sheet-new-tab.png) | Drawer (vaul) with label, directory, agent chips, one primary action |
+
+## Switching at every level
+
+| Between | Where | How |
+|---|---|---|
+| Hosts | Agents tab: Host chips under the header filter the list. Hosts tab: cards | tap |
+| Workspaces | Agents tab: collapsible groups, state remembered. From a Pane: tap the subtitle to open the Switch drawer | tap |
+| Tabs | Inside a Workspace the chip row is ordered by Tab with the Tab label as a divider; the Switch drawer shows the same grouping | tap chip |
+| Agents and shells | Chip row, or swipe on the header and chip row (never on the grid) | tap, swipe |
+
+## Terminal width on a phone
+
+The grid is what the multiplexer rendered at the server's size. Three answers, in order:
+
+1. **Wrap** (v1): the same grid text reflowed to the phone width, client-side. Reading mode for agent output. Replaces the earlier Screen/Recent idea: Claude Code runs on the alternate screen, so herdr's "recent" returns the same rows as the visible grid.
+2. **Fit** (v1): scale the grid to the phone width with exact metrics; the toggle label shows the grid size.
+3. **Resize to phone** (v2, explicit): ask the Mux to resize the Pane to the phone's columns and rows (herdr `pane.resize`, tmux `resize-window`). Real reflow, but it changes the desktop's view of that Pane, so it is a button, never automatic, and it restores on leaving.
 
 ## Rules the mockups follow
 
@@ -35,12 +54,12 @@ glyph. A floating tab bar carries the three root destinations and hides while yo
 | Right column | time since the last Status change, 12 px, tabular numerals |
 | Dot | 8 px; filled = unseen, 1.5 px ring = seen; `--warn` blocked, `--ok` done, `--accent` working, `--muted` idle, `--danger` offline |
 | Section label | 11 px, 600, +0.08 em, uppercase, `--muted`; 24 px above, 4 px below |
-| Tab bar | 52 px + safe area, inset 12 px, pill, `--elevated` at 88 %, blur, hairline; badge = unseen blocked count |
+| Tab bar | Agents · Hosts · Settings; 52 px + safe area, inset 12 px, 14 px radius, `--elevated` at 88 %, blur, hairline; badge = unseen blocked count |
 | Surfaces | `--bg` page · `--surface` inset controls (composer, key caps, chips) · `--elevated` raised (tab bar, blocked card, drawers) |
 | Accent | primary button, current chip or tab, `working`, focus ring. Nothing else |
-| Radius | 10 px controls, 12 px composer, 16 px cards, pill for chips and the tab bar |
+| Radius | 8 px chips, buttons and key caps; 10 px composer; 12 px cards and the blocked card; 14 px tab bar; 16 px drawer top. Dots stay circles. No pills |
 | Type | caption 12/1.35 · body 15/1.45 · title 17/1.25 600 · mono 12/1.35 |
-| Grid | scrolled by default, right-edge fade while it overflows; fit-width toggle scales the `<pre>` |
+| Grid | scrolled by default, right-edge fade while it overflows; Wrap toggle reflows, Fit toggle scales the `<pre>` |
 | Key bar | agent: `esc ↑ ↓ tab shift+tab enter ctrl+c` · shell: `esc tab ↑ ↓ ← → enter ctrl+c ctrl+d` |
 | Composer | 12 px label with the agent's glyph, placeholder in the agent's voice, mic replaces send while empty |
 | Blocked card | sticky above the key bar, `--elevated`, title + rule id, one-line detection excerpt, Yes/No preset then hint keys |
@@ -59,10 +78,10 @@ glyph. A floating tab bar carries the three root destinations and hides while yo
 
 ## Open questions
 
-1. Agent chip row: show it with a single Agent too, or only when a Workspace has two or more?
+1. Call a Workspace a "Space" in the UI? (herdr says workspace; tmux says session; the maintainer says space.)
 2. Blocked card: open by default, or collapsed to one line until tapped?
 3. Theme picker: chips (as mocked) or a full list with previews?
-4. Grid toggle label: the grid size (`120×48`) or the word "Fit"?
+4. Fit toggle label: the grid size (`120×48`) or the word "Fit"?
 
 ## How to update the mockups
 
