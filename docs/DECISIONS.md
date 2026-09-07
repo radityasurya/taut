@@ -10,6 +10,8 @@ This is the record. The two irreversible choices also have ADRs in [adr/](./adr/
 | Job of the app | Agent triage and full terminal are equal | Termius covers only the terminal; collie covers only triage well |
 | Bar vs collie | Clean, non-boxy look; two-tap interaction model | The maintainer's two complaints about collie |
 | Look | Linear / Notion / Slack / Discord density; hand-styled with selected shadcn pieces | collie's boxy look is largely shadcn defaults |
+| shadcn pieces (recon 2026-09-08) | Adopt Drawer (vaul) for bottom sheets, Dialog for confirm-close, Skeleton for loading, Sonner for toasts from phase 7. Port the mic and attachment wiring from AI Elements `prompt-input` by hand. Everything else stays hand-rolled: status dots, rows, section headers, empty states, offline banner, settings rows, segmented control, composer, ANSI renderer, install hint | Drawer is the one clear win (swipe-to-dismiss, scroll lock, focus trap). AI Elements would pull five Radix primitives taut has no other use for. No registry renders a live terminal grid |
+| Theme tokens | Keep taut's own token names; values are already the Catppuccin palette | catppuccin/shadcn-ui is copy-paste CSS in shadcn's names; renaming every utility buys nothing |
 | Themes | One selector: System, Light, Dark, Catppuccin Latte / Frappé / Macchiato / Mocha | Each entry defines chrome tokens and 16 ANSI colors; one table, no code |
 | Interaction | Home is one flat Pane list, unseen `blocked` first; tap opens the Pane; swipe between Panes of a Workspace | Anything not reachable in two taps is a later feature |
 | Blocked UX | Buttons from herdr's own detection (rule id, detection region, footer hints) | collie's per-agent grammars are ~680 KB; herdr already classifies 19 agents |
