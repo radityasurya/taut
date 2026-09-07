@@ -1,0 +1,14 @@
+# gitleaks config. Default rules plus one allowlist.
+#
+# taut uses `key` as the identifier field for Muxes and Panes (`key: 'host/mux/pane'`),
+# which trips the generic-api-key rule on fixtures and tests. Allow only that exact shape:
+# a quoted path-like id. Anything that looks like a real token still fails the scan.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Mux and Pane identifier fields, not credentials"
+regexTarget = "line"
+regexes = [
+  '''\bkey: '[a-z0-9]+(/[a-z0-9:%$._-]+){1,2}',''',
+]

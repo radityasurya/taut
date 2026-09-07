@@ -21,6 +21,11 @@ anything is wired. Later phases replace mock data with real calls; the screens s
       "add to Home Screen" hint, trusted login field
 - [ ] Sheets: new Tab, new Workspace / worktree, rename, close confirm
 - [ ] PWA shell: manifest, icons, standalone display, safe-area insets
+- [ ] Floating bottom tab bar on Home, phone style: Panes · Hosts · Settings, with a badge
+      for unseen `blocked`
+- [ ] Agent-aware Pane chrome: when the Pane runs Claude Code or Pi, the composer reads as
+      that agent's prompt box, and a chip row at the top switches between the Agents of the
+      same Workspace; shell and monitor Panes (htop, logs) render as a plain grid
 
 Verify: open `https://<hub>:5173/?mock` on iPhone and Android; walk every screen in all
 six themes; nothing needs a running herdr.
