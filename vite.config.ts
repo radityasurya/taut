@@ -9,6 +9,7 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: 5173,
+    allowedHosts: ['.ts.net', 'localhost'], // tailscale serve forwards with the tailnet Host header
     proxy: { '/api': { target: 'http://127.0.0.1:7700', changeOrigin: false } },
   },
 });
