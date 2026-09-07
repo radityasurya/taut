@@ -8,6 +8,7 @@ const statuses = new Set<Status>(['idle', 'working', 'blocked', 'done', 'unknown
 export class HerdrMux implements Mux {
   readonly kind = 'herdr' as const;
   private revisions = new Map<string, number>();
+  private rows = new Map<string, number>();
   private listeners = new Set<(paneIds: string[] | 'all') => void>();
   private stream?: Socket;
   private stopped = false;
@@ -51,6 +52,8 @@ export class HerdrMux implements Mux {
     }
     const panes: Pane[] = (snap.panes ?? []).map((pane: Json) => {
       this.revisions.set(pane.pane_id, pane.revision ?? 0);
+      const rows = sizes.get(pane.pane_id)?.rows;
+      if (rows) this.rows.set(pane.pane_id, rows);
       const agent = pane.display_agent ?? pane.agent;
       return {
         id: pane.pane_id, tabId: pane.tab_id, workspaceId: pane.workspace_id,
@@ -70,7 +73,12 @@ export class HerdrMux implements Mux {
   async read(paneId: string, mode: ScreenMode): Promise<Screen> {
     const params = mode === 'visible'
       ? { pane_id: paneId, source: 'visible', format: 'ansi', strip_ansi: false }
-      : { pane_id: paneId, source: 'recent', format: 'text', strip_ansi: true, lines: 500 };
+      // ponytail: herdr 0.8.0 costs ~30 ms per requested line once `lines` reaches the pane
+      // height, on panes running Claude Code — 500 lines is ~16 s, past our own 10 s timeout,
+      // and the orphaned job then blocks the next read of that pane. Stay under the cliff:
+      // `rows - 2` is the most herdr returns cheaply, and matches Screen/recent in CONTEXT.md
+      // ("recent output as reflowed text"). Raise it when herdr fixes the scrollback path.
+      : { pane_id: paneId, source: 'recent', format: 'text', strip_ansi: true, lines: Math.max(2, (this.rows.get(paneId) ?? 50) - 2) };
     const result = (await this.rpc('pane.read', params)).read;
     return { text: result.text, ansi: mode === 'visible', revision: this.revisions.get(paneId) ?? result.revision, mode };
   }
