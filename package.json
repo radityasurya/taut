@@ -4,9 +4,19 @@
   "description": "Mobile-first PWA hub for herdr (and tmux): see every coding agent's state from your phone and reply, over Tailscale.",
   "license": "MIT",
   "type": "module",
-  "bin": { "taut": "server/main.ts" },
-  "files": ["server", "shared", "dist/web", "README.md", "LICENSE"],
-  "engines": { "bun": ">=1.2" },
+  "bin": {
+    "taut": "server/main.ts"
+  },
+  "files": [
+    "server",
+    "shared",
+    "dist/web",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "bun": ">=1.2"
+  },
   "scripts": {
     "dev": "make dev",
     "dev:server": "bun --watch server/main.ts",
@@ -17,8 +27,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.23",
+    "clsx": "^2.1.1",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "tailwind-merge": "^3.6.0",
+    "vaul": "^1.1.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.0",

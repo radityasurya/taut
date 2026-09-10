@@ -40,16 +40,27 @@ export interface Mux {
 // Keys: muxKey = `${hostId}/${muxId}`, paneKey = `${muxKey}/${paneId}`. Raw in JSON;
 // `encodeURIComponent(key)` when used as a path segment (`/api/panes/:key/...`).
 
-export interface StateHost { id: string; label: string; online: boolean; error?: string }
+export interface StateHost {
+  id: string; label: string; online: boolean; error?: string;
+  /** ssh target or tailnet name; absent for the local machine */
+  target?: string;
+  /** where the Host came from: this machine, `herdr machine list`, or the config file */
+  source?: 'local' | 'machines' | 'config';
+}
 export interface StateMux { key: string; hostId: string; kind: 'herdr' | 'tmux'; label: string; online: boolean }
 export interface StateWorkspace { key: string; muxKey: string; id: string; label: string; cwd?: string }
+export interface StateTab { key: string; muxKey: string; workspaceId: string; id: string; label: string }
 export interface StatePane {
   key: string; muxKey: string; workspaceId: string; tabId: string; id: string; title: string;
   cwd?: string; agent?: string; status: Status; revision: number; seenRevision: number;
   cols?: number; rows?: number;
+  /** last non-empty line of the visible Screen; agent Panes only, cached per revision by the Hub */
+  lastLine?: string;
+  /** ms epoch of the last Status change the Hub observed; first sight counts as a change */
+  statusChangedAt?: number;
 }
 /** GET /api/state and SSE `event: state` */
-export interface State { hosts: StateHost[]; muxes: StateMux[]; workspaces: StateWorkspace[]; panes: StatePane[] }
+export interface State { hosts: StateHost[]; muxes: StateMux[]; workspaces: StateWorkspace[]; tabs: StateTab[]; panes: StatePane[] }
 /** GET /api/panes/:key/screen?mode= and SSE `event: screen` */
 export interface ScreenEvent extends Screen { key: string }
 /** POST /api/panes/:key/input — text is sent first, then keys */

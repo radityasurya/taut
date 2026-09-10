@@ -1,17 +1,27 @@
-import { useEffect, useId, useRef } from 'react';
 import type { FormEvent, InputHTMLAttributes, ReactNode } from 'react';
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog.tsx';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer.tsx';
 
 // One input look and one primary button look for every sheet.
 export const field =
-  'min-h-11 w-full rounded-lg border border-border bg-surface px-3 text-[15px] text-fg placeholder:text-muted';
-export const primary = 'min-h-11 w-full rounded-lg bg-accent text-[15px] font-medium text-bg active:opacity-90';
+  'min-h-11 w-full rounded-composer border border-border bg-surface px-3.5 text-body text-fg placeholder:text-muted';
+export const primary =
+  'min-h-12 w-full rounded-chip bg-accent text-body font-semibold text-bg active:opacity-90';
 
 export function Field({ label, hint, ...input }: { label: string; hint?: string } & InputHTMLAttributes<HTMLInputElement>) {
   return (
     <label className="block px-4 py-2">
       <span className="label-caps block pb-1.5">{label}</span>
       <input {...input} className={field} />
-      {hint && <span className="mt-1 block text-xs text-muted">{hint}</span>}
+      {hint && <span className="mt-1 block text-caption text-muted">{hint}</span>}
     </label>
   );
 }
@@ -23,8 +33,11 @@ const values = (form: HTMLFormElement) => {
 };
 
 /**
- * Bottom sheet. Closes on Escape and on a backdrop tap, and focuses its first field.
- * ponytail: no scroll lock and no focus trap; add both when a sheet grows past one form.
+ * Bottom sheet: the shadcn Drawer (vaul). Swipe to dismiss, scroll lock, focus trap and
+ * Escape all come from vaul; taut only supplies the surface and the title.
+ * ponytail: `repositionInputs` is off because the viewport meta already asks the browser
+ * for `interactive-widget=resizes-content`, which moves the drawer for us. Turn it back
+ * on if a browser without that support ever hides a focused field behind the keyboard.
  */
 export function Sheet({
   open,
@@ -37,40 +50,40 @@ export function Sheet({
   onClose: () => void;
   children: ReactNode;
 }) {
-  const panel = useRef<HTMLDivElement>(null);
-  const titleId = useId();
-  const close = useRef(onClose);
-  close.current = onClose;
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close.current();
-    addEventListener('keydown', onKey);
-    panel.current?.querySelector<HTMLElement>('input, select')?.focus();
-    return () => removeEventListener('keydown', onKey);
-  }, [open]);
-
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-fg/40" onClick={onClose} />
-      <div
-        ref={panel}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-2xl bg-bg pb-[env(safe-area-inset-bottom)]"
-      >
-        <div className="sticky top-0 bg-bg pt-2">
-          <span aria-hidden className="mx-auto block h-1 w-9 rounded-full bg-border" />
-          <h2 id={titleId} className="px-4 pt-3 pb-1 text-[15px] font-medium">
-            {title}
-          </h2>
-        </div>
-        {children}
+    <Drawer open={open} onOpenChange={(next) => !next && onClose()} repositionInputs={false}>
+      {/* No description: every sheet is a titled form. Telling Radix so keeps it quiet. */}
+      <DrawerContent aria-describedby={undefined}>
+        <DrawerHeader>
+          <DrawerTitle>{title}</DrawerTitle>
+        </DrawerHeader>
+        <div className="overflow-y-auto overscroll-contain pb-2">{children}</div>
+      </DrawerContent>
+    </Drawer>
+  );
+}
+
+/**
+ * One chip per agent plus "shell only", as radio inputs so the form still reads
+ * `agent` from FormData. The chip is the label; the input stays screen-reader only.
+ */
+function AgentChips({ agents }: { agents: string[] }) {
+  return (
+    <fieldset className="px-4 py-2">
+      <legend className="label-caps pb-1.5">Start</legend>
+      <div className="flex flex-wrap gap-2">
+        {[...agents, ''].map((a, i) => (
+          <label key={a || 'shell'} className="block">
+            <input type="radio" name="agent" value={a} defaultChecked={i === 0} className="peer sr-only" />
+            <span
+              className="flex min-h-10 items-center rounded-chip border border-border bg-surface px-3.5 text-[13px] text-fg peer-checked:border-accent peer-checked:bg-accent peer-checked:font-semibold peer-checked:text-bg peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+            >
+              {a || 'shell only'}
+            </span>
+          </label>
+        ))}
       </div>
-    </div>
+    </fieldset>
   );
 }
 
@@ -104,20 +117,10 @@ export function NewTabSheet({
           autoCorrect="off"
           spellCheck={false}
         />
-        <label className="block px-4 py-2">
-          <span className="label-caps block pb-1.5">Agent</span>
-          <select name="agent" defaultValue="" className={field}>
-            <option value="">None</option>
-            {agents.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="px-4 py-3">
+        <AgentChips agents={agents} />
+        <div className="px-4 pt-3">
           <button type="submit" className={primary}>
-            Open Tab
+            Create tab
           </button>
         </div>
       </form>
@@ -163,9 +166,9 @@ export function NewWorkspaceSheet({
           autoCorrect="off"
           spellCheck={false}
         />
-        <div className="px-4 py-3">
+        <div className="px-4 pt-3">
           <button type="submit" className={primary}>
-            Open Workspace
+            Create workspace
           </button>
         </div>
       </form>
@@ -196,7 +199,7 @@ export function RenameSheet({
         }}
       >
         <Field label="Name" name="label" required defaultValue={current} autoCapitalize="none" autoCorrect="off" />
-        <div className="px-4 py-3">
+        <div className="px-4 pt-3">
           <button type="submit" className={primary}>
             Rename
           </button>
@@ -206,6 +209,7 @@ export function RenameSheet({
   );
 }
 
+/** A destructive confirm is a Dialog, not a drawer: it must not be swipe-dismissible. */
 export function ConfirmCloseSheet({
   open,
   onClose,
@@ -218,24 +222,33 @@ export function ConfirmCloseSheet({
   title: string;
 }) {
   return (
-    <Sheet open={open} title="Close Pane" onClose={onClose}>
-      <p className="px-4 pt-1 text-[15px]">Close “{title}”?</p>
-      <p className="px-4 pt-1 text-sm leading-relaxed text-muted">The Pane and anything running in it stops.</p>
-      <div className="flex gap-2 px-4 py-4">
-        <button type="button" onClick={onClose} className="min-h-11 flex-1 rounded-lg bg-surface text-[15px] font-medium">
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            onConfirm();
-            onClose();
-          }}
-          className="min-h-11 flex-1 rounded-lg bg-danger text-[15px] font-medium text-bg active:opacity-90"
-        >
-          Close
-        </button>
-      </div>
-    </Sheet>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Close Pane</DialogTitle>
+          <DialogDescription className="text-fg">Close “{title}”?</DialogDescription>
+        </DialogHeader>
+        <p className="mt-1 text-body text-muted">The Pane and anything running in it stops.</p>
+        <DialogFooter>
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-11 flex-1 rounded-chip bg-surface text-body font-medium active:opacity-90"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onConfirm();
+              onClose();
+            }}
+            className="min-h-11 flex-1 rounded-chip bg-danger text-body font-medium text-bg active:opacity-90"
+          >
+            Close
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

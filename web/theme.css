@@ -7,14 +7,48 @@
   --color-fg: var(--fg);
   --color-muted: var(--muted);
   --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
   --color-border: var(--border);
   --color-accent: var(--accent);
   --color-ok: var(--ok);
   --color-warn: var(--warn);
   --color-danger: var(--danger);
 
+  /* One raised-surface shadow for every `bg-elevated` thing: drawer, dialog, tab bar,
+     blocked card. Direction-neutral, so it reads the same rising from the bottom or
+     floating in the middle. In the light themes it carries a hairline ring, because
+     there `--elevated` equals `--bg`. */
+  --shadow-elevated: var(--elevated-shadow);
+
+  /* docs/DESIGN.md "Radius": 8 chips/buttons/key caps, 10 composer, 12 cards,
+     14 tab bar, 16 drawer top. Named, so a slice never has to remember a number. */
+  --radius-chip: 8px;
+  --radius-composer: 10px;
+  --radius-card: 12px;
+  --radius-tabbar: 14px;
+  --radius-drawer: 16px;
+
+  /* docs/DESIGN.md "Type". Mono text is `font-mono text-caption`: same 12/1.35. */
+  --text-caption: 12px;
+  --text-caption--line-height: 1.35;
+  --text-body: 15px;
+  --text-body--line-height: 1.45;
+  --text-title: 17px;
+  --text-title--line-height: 1.25;
+  --text-title--font-weight: 600;
+
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-mono: "taut-box", ui-monospace, SFMono-Regular, Menlo, "Roboto Mono", monospace;
+}
+
+/* Box drawing, Braille, arrows and the check/cross agents print. A subset, so the
+   terminal grid keeps its metrics where the system mono font has holes; everything
+   outside the range falls through to the stack above. */
+@font-face {
+  font-family: "taut-box";
+  src: url(/taut-box.woff2) format("woff2");
+  unicode-range: U+2500-257F, U+2580-259F, U+2800-28FF, U+2190-21FF, U+25A0-25FF, U+2713, U+2717, U+2726;
+  font-display: swap;
 }
 
 /* ---- light (neutral) ---- */
@@ -25,6 +59,9 @@
   --fg: #18181b;
   --muted: #71717a;
   --surface: #f4f4f5;
+  /* Same as --bg by design: in the light themes the shadow, not the colour, raises a surface. */
+  --elevated: #ffffff;
+  --elevated-shadow: 0 0 0 1px #e4e4e7, 0 8px 40px rgb(0 0 0 / 0.14);
   --border: #e4e4e7;
   --accent: #5b5bd6;
   --ok: #16a34a;
@@ -55,6 +92,8 @@
   --fg: #e7e7ea;
   --muted: #8b8b96;
   --surface: #17171b;
+  --elevated: #1c1c21;
+  --elevated-shadow: 0 8px 40px rgb(0 0 0 / 0.5);
   --border: #27272d;
   --accent: #8b7cf6;
   --ok: #4ade80;
@@ -83,8 +122,10 @@
   color-scheme: light;
   --bg: #eff1f5;
   --fg: #4c4f69;
-  --muted: #6c6f85;
+  --muted: #5c5f77;
   --surface: #e6e9ef;
+  --elevated: #ffffff;
+  --elevated-shadow: 0 0 0 1px #ccd0da, 0 8px 40px rgb(0 0 0 / 0.12);
   --border: #ccd0da;
   --accent: #8839ef;
   --ok: #40a02b;
@@ -115,6 +156,8 @@
   --fg: #c6d0f5;
   --muted: #a5adce;
   --surface: #292c3c;
+  --elevated: #414559;
+  --elevated-shadow: 0 8px 40px rgb(0 0 0 / 0.4);
   --border: #414559;
   --accent: #ca9ee6;
   --ok: #a6d189;
@@ -145,6 +188,8 @@
   --fg: #cad3f5;
   --muted: #a5adcb;
   --surface: #1e2030;
+  --elevated: #363a4f;
+  --elevated-shadow: 0 8px 40px rgb(0 0 0 / 0.4);
   --border: #363a4f;
   --accent: #c6a0f6;
   --ok: #a6da95;
@@ -175,6 +220,8 @@
   --fg: #cdd6f4;
   --muted: #a6adc8;
   --surface: #181825;
+  --elevated: #313244;
+  --elevated-shadow: 0 8px 40px rgb(0 0 0 / 0.4);
   --border: #313244;
   --accent: #cba6f7;
   --ok: #a6e3a1;
@@ -237,4 +284,38 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+/* Scrim and dialog fade. Radix and vaul both set `data-state`, so one utility covers
+   the Drawer overlay, the Dialog overlay and the Dialog box. */
+@utility fade {
+  &[data-state="open"] {
+    animation: taut-fade-in 180ms ease-out;
+  }
+  &[data-state="closed"] {
+    animation: taut-fade-out 140ms ease-in;
+  }
+}
+
+@keyframes taut-fade-in {
+  from { opacity: 0 }
+  to { opacity: 1 }
+}
+
+@keyframes taut-fade-out {
+  from { opacity: 1 }
+  to { opacity: 0 }
+}
+
+/* Unlayered, so it outranks the utilities layer without fighting specificity. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+
+  .fade {
+    animation: none !important;
+  }
 }

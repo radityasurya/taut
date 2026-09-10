@@ -73,12 +73,12 @@ export function Home({ state }: { state: State | null }) {
                       <span className="flex items-baseline gap-2">
                         <span
                           className={`shrink-0 text-[15px] ${
-                            p.agent ? (unseen(p) ? 'font-medium text-fg' : 'text-fg/70') : 'text-muted'
+                            p.agent ? (unseen(p) ? 'font-medium text-fg' : 'text-muted') : 'text-muted'
                           }`}
                         >
                           {p.agent ?? 'shell'}
                         </span>
-                        <span className={`truncate text-[15px] ${unseen(p) ? 'text-fg' : 'text-fg/60'}`}>{p.title}</span>
+                        <span className={`truncate text-[15px] ${unseen(p) ? 'text-fg' : 'text-muted'}`}>{p.title}</span>
                       </span>
                       {p.cwd && <span className="mt-0.5 block truncate text-xs text-muted">{basename(p.cwd)}</span>}
                     </span>

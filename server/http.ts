@@ -1,5 +1,7 @@
 import { resolve, sep } from 'node:path';
 import type { InputBody, ScreenMode, SeenBody } from '../shared/types.ts';
+import { HerdrMux } from './herdr.ts';
+import { discoverLocalMuxes, hostId } from './hosts.ts';
 import type { Hub } from './mux.ts';
 
 const json = (value: unknown, status = 200) => Response.json(value, { status });
@@ -22,6 +24,15 @@ export function startHttp(hub: Hub, opts: { port: number; hostname: string; stat
       // ponytail: Tailscale-User-Login check in phase 5.
       try {
         if (req.method === 'GET' && url.pathname === '/api/state') return json(await hub.state());
+        const hostRetry = url.pathname.match(/^\/api\/hosts\/([^/]+)\/retry$/);
+        if (req.method === 'POST' && hostRetry) {
+          let id: string;
+          try { id = decodeURIComponent(hostRetry[1]!); } catch { return json({ error: 'bad host id' }, 400); }
+          if (id !== hostId) return json({ error: 'host not found' }, 404);
+          for (const item of await discoverLocalMuxes()) if (!hub.hasMux(id, item.id)) hub.add(id, new HerdrMux(item.id, item.socketPath));
+          await hub.refreshHost(id);
+          return json({ ok: true });
+        }
         if (req.method === 'GET' && url.pathname === '/api/events') {
           const paneKey = url.searchParams.get('pane') ?? undefined;
           const mode: ScreenMode = url.searchParams.get('mode') === 'recent' ? 'recent' : 'visible';

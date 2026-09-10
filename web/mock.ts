@@ -74,12 +74,17 @@ const CLAUDE_RECENT = [
   'esc to cancel · enter to confirm',
 ].join('\r\n');
 
-const host = (id: string, label: string, online: boolean, error?: string) => ({ id, label, online, error });
+/** ms epoch `m` minutes ago, for `statusChangedAt`. */
+const ago = (m: number) => Date.now() - m * 60_000;
 
 export const mockState: State = {
   hosts: [
-    host('mbp', 'MacBook', true),
-    host('vps', 'Hetzner', false, 'ssh: connect to host vps.tail9f2c.ts.net port 22: Operation timed out'),
+    { id: 'mbp', label: 'MacBook', online: true, source: 'local' },
+    {
+      id: 'vps', label: 'studio', online: false, source: 'machines',
+      target: 'dev@studio.tail1234.ts.net',
+      error: 'ssh: connect to host studio port 22: No route to host',
+    },
   ],
   muxes: [
     { key: 'mbp/herdr', hostId: 'mbp', kind: 'herdr', label: 'herdr', online: true },
@@ -94,46 +99,66 @@ export const mockState: State = {
     { key: 'mbp/tmux/admin', muxKey: 'mbp/tmux', id: 'admin', label: 'admin', cwd: '~' },
     { key: 'vps/herdr/blog', muxKey: 'vps/herdr', id: 'blog', label: 'blog', cwd: '~/srv/blog' },
   ],
+  // herdr numbers Tabs `t<n>`; tmux windows are their index. Both are the Mux's own id.
+  tabs: [
+    { key: 'mbp/herdr/t1', muxKey: 'mbp/herdr', workspaceId: 'taut', id: 't1', label: 'main' },
+    { key: 'mbp/herdr/t2', muxKey: 'mbp/herdr', workspaceId: 'taut', id: 't2', label: 'tests' },
+    { key: 'mbp/herdr/t3', muxKey: 'mbp/herdr', workspaceId: 'taut', id: 't3', label: 'docs' },
+    { key: 'mbp/herdr/t4', muxKey: 'mbp/herdr', workspaceId: 'digivaley', id: 't4', label: 'main' },
+    { key: 'mbp/herdr/t5', muxKey: 'mbp/herdr', workspaceId: 'digivaley', id: 't5', label: 'shell' },
+    { key: 'mbp/tmux/0', muxKey: 'mbp/tmux', workspaceId: 'admin', id: '0', label: 'htop' },
+    { key: 'mbp/tmux/1', muxKey: 'mbp/tmux', workspaceId: 'admin', id: '1', label: 'logs' },
+  ],
   panes: [
     {
       key: 'mbp/herdr/p1', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't1', id: 'p1',
       title: 'claude — fix flaky ansi test', cwd: '~/projects/taut', agent: 'claude',
       status: 'blocked', revision: 412, seenRevision: 402, cols: 80, rows: 24,
+      lastLine: 'Permission required — Bash pnpm test --filter ansi', statusChangedAt: ago(4),
     },
     {
       key: 'mbp/herdr/p2', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't2', id: 'p2',
       title: 'codex — split the Mux registry', cwd: '~/projects/taut', agent: 'codex',
       status: 'working', revision: 1180, seenRevision: 1180, cols: 80, rows: 24,
+      lastLine: 'Running tests… 12/40', statusChangedAt: ago(2),
     },
     {
       key: 'mbp/herdr/p3', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't2', id: 'p3',
       title: 'pnpm dev', cwd: '~/projects/taut',
-      status: 'unknown', revision: 87, seenRevision: 87, cols: 80, rows: 24,
+      status: 'unknown', revision: 87, seenRevision: 87, cols: 80, rows: 24, statusChangedAt: ago(46),
     },
     {
       key: 'mbp/herdr/p4', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't3', id: 'p4',
       title: 'claude — write ARCHITECTURE.md', cwd: '~/projects/taut', agent: 'claude',
       status: 'done', revision: 640, seenRevision: 611, cols: 80, rows: 24,
+      lastLine: 'Wrote docs/ARCHITECTURE.md — 214 lines', statusChangedAt: ago(12),
     },
     {
       key: 'mbp/herdr/p5', muxKey: 'mbp/herdr', workspaceId: 'digivaley', tabId: 't4', id: 'p5',
       title: 'codex — bump deps', cwd: '~/projects/digivaley.com', agent: 'codex',
       status: 'blocked', revision: 55, seenRevision: 55, cols: 80, rows: 24,
+      lastLine: 'Waiting for approval: edit src/auth.ts', statusChangedAt: ago(23),
     },
     {
       key: 'mbp/herdr/p6', muxKey: 'mbp/herdr', workspaceId: 'digivaley', tabId: 't4', id: 'p6',
       title: 'claude — restyle the pricing page', cwd: '~/projects/digivaley.com', agent: 'claude',
       status: 'idle', revision: 233, seenRevision: 233, cols: 80, rows: 24,
+      lastLine: 'Restyled the pricing grid to three columns', statusChangedAt: ago(95),
     },
     {
       key: 'mbp/herdr/p7', muxKey: 'mbp/herdr', workspaceId: 'digivaley', tabId: 't5', id: 'p7',
       title: 'zsh', cwd: '~/projects/digivaley.com',
-      status: 'idle', revision: 12, seenRevision: 12, cols: 80, rows: 24,
+      status: 'idle', revision: 12, seenRevision: 12, cols: 80, rows: 24, statusChangedAt: ago(121),
     },
     {
-      key: 'mbp/tmux/p0', muxKey: 'mbp/tmux', workspaceId: 'admin', tabId: 'w0', id: 'p0',
+      key: 'mbp/tmux/p0', muxKey: 'mbp/tmux', workspaceId: 'admin', tabId: '0', id: 'p0',
       title: 'htop', cwd: '~',
-      status: 'unknown', revision: 3, seenRevision: 0, cols: 120, rows: 30,
+      status: 'unknown', revision: 3, seenRevision: 0, cols: 120, rows: 30, statusChangedAt: ago(178),
+    },
+    {
+      key: 'mbp/tmux/p1', muxKey: 'mbp/tmux', workspaceId: 'admin', tabId: '1', id: 'p1',
+      title: 'journalctl -fu caddy', cwd: '~',
+      status: 'unknown', revision: 9, seenRevision: 9, cols: 120, rows: 30, statusChangedAt: ago(150),
     },
   ],
 };
@@ -200,6 +225,7 @@ export function assertMockInvariants(): void {
     mockState.workspaces.some((w) => !mockState.panes.some((p) => p.muxKey === w.muxKey && p.workspaceId === w.id)) || 'an empty Workspace',
     Object.values(mockExplains).some((e) => e.ruleId.includes('permission')) || 'a permission Explain',
     mockState.panes.every((p) => mockScreens[p.key]) || 'a Screen per Pane',
+    mockState.panes.every((p) => mockState.tabs.some((t) => t.muxKey === p.muxKey && t.id === p.tabId)) || 'a Tab per Pane',
   ].filter((p) => p !== true);
   if (problems.length) throw new Error(`mock fixtures lost ${problems.join(', ')}`);
 }
@@ -243,6 +269,7 @@ function input(s: Store, key: string, body: InputBody): void {
     append(s, key, k === 'enter' ? '⏎' : `${DIM}[${k}]${RESET}`);
     if (pane.status === 'blocked' && (k === 'enter' || k === 'esc')) {
       pane.status = k === 'enter' ? 'working' : 'idle';
+      pane.statusChangedAt = Date.now();
       append(s, key, k === 'enter' ? `${GREEN}✔${RESET} ${DIM}running pnpm test --filter ansi${RESET}` : `${DIM}cancelled${RESET}`);
     }
   }
@@ -264,6 +291,7 @@ function tick(s: Store): void {
     const mover = pick(s.state.panes.filter((p) => p.status === 'working' || p.status === 'idle'));
     if (mover) {
       mover.status = mover.status === 'working' ? 'done' : 'working';
+      mover.statusChangedAt = Date.now();
       if (mover.status === 'done') mover.revision += 1;
     }
   }
@@ -358,6 +386,15 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
     return noContent();
   }
   return undefined;
+}
+
+/**
+ * The `open` query param, so a screenshot can land on an open drawer:
+ * `?mock&open=switch` → `'switch'`, `?mock&open=newtab` → `'newtab'`, otherwise `null`.
+ * ponytail: no allow-list of names; the screens that read it already know theirs.
+ */
+export function mockOpen(): string | null {
+  return new URLSearchParams(location.search).get('open');
 }
 
 /** Serve the Hub API from memory when the page is opened with `?mock`. */

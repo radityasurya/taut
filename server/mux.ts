@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import { dirname, join } from 'node:path';
+import { parseAnsi } from '../shared/ansi.ts';
 import type { Explain, InputBody, Mux, Screen, ScreenEvent, ScreenMode, State, Tree } from '../shared/types.ts';
 
 export interface HubListener {
@@ -18,7 +19,10 @@ export class Hub {
   private listeners = new Set<HubListener>();
   private screenTimers = new Map<HubListener, ReturnType<typeof setTimeout>>();
   private cached?: State;
-  private statuses = new Map<string, string>();
+  private statuses = new Map<string, { status: string; at: number }>();
+  private lastLines = new Map<string, { revision: number; line?: string }>();
+  private lastLineReads = 0;
+  private lastLineWaiters: (() => void)[] = [];
   private seen: Record<string, number> = {};
   private stateTimer?: ReturnType<typeof setTimeout>;
   private seenTimer?: ReturnType<typeof setTimeout>;
@@ -37,6 +41,14 @@ export class Hub {
     entry.unsubscribe = mux.onChange(ids => this.changed(key, ids));
     this.entries.set(key, entry);
     this.cached = undefined;
+  }
+
+  hasMux(hostId: string, muxId: string): boolean { return this.entries.has(`${hostId}/${muxId}`); }
+
+  async refreshHost(hostId: string): Promise<void> {
+    await Promise.all([...this.entries].filter(([, entry]) => entry.hostId === hostId).map(([key]) => this.refresh(key)));
+    this.recompute();
+    this.emitState();
   }
 
   private changed(muxKey: string, ids: string[] | 'all'): void {
@@ -61,26 +73,58 @@ export class Hub {
         entry.tree = await entry.mux.tree();
         this.recompute();
         this.emitState();
+        await this.fillLastLines(muxKey, entry);
+        this.recompute();
+        this.emitState();
       } while (entry.again);
     })().finally(() => { entry.refresh = undefined; });
     return entry.refresh;
   }
 
+  private async fillLastLines(muxKey: string, entry: Entry): Promise<void> {
+    const pending = (entry.tree?.panes ?? []).filter(pane => pane.agent && this.lastLines.get(`${muxKey}/${pane.id}`)?.revision !== pane.revision);
+    await Promise.all(pending.map(async pane => {
+      const key = `${muxKey}/${pane.id}`;
+      await this.acquireLastLineRead();
+      try {
+        const screen = await entry.mux.read(pane.id, 'visible');
+        const line = parseAnsi(screen.text).map(spans => spans.map(span => span.text).join('').trim()).filter(Boolean).at(-1)?.slice(0, 200);
+        this.lastLines.set(key, { revision: pane.revision, line });
+      } catch {
+        this.lastLines.set(key, { revision: pane.revision });
+      } finally {
+        this.releaseLastLineRead();
+      }
+    }));
+  }
+
+  private async acquireLastLineRead(): Promise<void> {
+    if (this.lastLineReads >= 4) await new Promise<void>(resolve => this.lastLineWaiters.push(resolve));
+    this.lastLineReads++;
+  }
+
+  private releaseLastLineRead(): void {
+    this.lastLineReads--;
+    this.lastLineWaiters.shift()?.();
+  }
+
   private recompute(): State {
     const hostIds = [...new Set([...this.entries.values()].map(e => e.hostId))];
     const state: State = {
-      hosts: hostIds.map(id => ({ id, label: id, online: true })), muxes: [], workspaces: [], panes: [],
+      hosts: hostIds.map(id => ({ id, label: id, online: true, source: 'local' })), muxes: [], workspaces: [], tabs: [], panes: [],
     };
     for (const [muxKey, entry] of this.entries) {
       state.muxes.push({ key: muxKey, hostId: entry.hostId, kind: entry.mux.kind, label: entry.mux.id, online: true });
       if (!entry.tree) continue;
       for (const workspace of entry.tree.workspaces) state.workspaces.push({ key: `${muxKey}/${workspace.id}`, muxKey, ...workspace });
+      for (const tab of entry.tree.tabs) state.tabs.push({ key: `${muxKey}/${tab.id}`, muxKey, ...tab });
       for (const pane of entry.tree.panes) {
         const key = `${muxKey}/${pane.id}`;
         const previous = this.statuses.get(key);
-        if (pane.status === 'blocked' && previous !== 'blocked') console.log(`taut: ${key} → blocked`);
-        this.statuses.set(key, pane.status);
-        state.panes.push({ key, muxKey, ...pane, seenRevision: this.seen[key] ?? 0 });
+        if (pane.status === 'blocked' && previous?.status !== 'blocked') console.log(`taut: ${key} → blocked`);
+        const status = previous?.status === pane.status ? previous : { status: pane.status, at: Date.now() };
+        this.statuses.set(key, status);
+        state.panes.push({ key, muxKey, ...pane, seenRevision: this.seen[key] ?? 0, lastLine: pane.agent ? this.lastLines.get(key)?.line : undefined, statusChangedAt: status.at });
       }
     }
     this.cached = state;
