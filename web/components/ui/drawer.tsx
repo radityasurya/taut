@@ -39,14 +39,14 @@ function DrawerContent({ className, children, ...props }: React.ComponentProps<t
       <DrawerPrimitive.Content
         data-slot="drawer-content"
         className={cn(
-          'fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto max-h-[85dvh] flex-col',
+          'fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto max-h-[85dvh] flex-col focus:outline-none',
           'rounded-t-drawer bg-elevated text-fg shadow-elevated',
           'pb-[max(env(safe-area-inset-bottom),12px)]',
           className,
         )}
         {...props}
       >
-        <div aria-hidden className="mx-auto mt-2.5 mb-1 h-1 w-9 shrink-0 rounded-full bg-border" />
+        <div aria-hidden className="mx-auto mt-2.5 mb-1 h-1 w-9 shrink-0 rounded-full bg-muted/50" />
         {children}
       </DrawerPrimitive.Content>
     </DrawerPortal>

@@ -1,54 +1,124 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getTheme, setTheme, THEMES } from './app.tsx';
+import type { Theme } from './app.tsx';
+import { InstallHint, Toggle } from './hosts.tsx';
 
-const LABELS: Record<string, string> = {
+const LABELS: Record<Theme, string> = {
   system: 'System',
   light: 'Light',
   dark: 'Dark',
-  latte: 'Catppuccin Latte',
-  frappe: 'Catppuccin Frappé',
-  macchiato: 'Catppuccin Macchiato',
-  mocha: 'Catppuccin Mocha',
+  latte: 'Latte',
+  frappe: 'Frappé',
+  macchiato: 'Macchiato',
+  mocha: 'Mocha',
 };
 
-// ponytail: hosts, push, trusted user in phases 3/5.
+/** Each chip carries its theme's own `--bg` as the swatch. System has no colour of its own. */
+const SWATCH: Record<Theme, string | null> = {
+  system: null,
+  light: '#ffffff',
+  dark: '#0e0e11',
+  latte: '#eff1f5',
+  frappe: '#303446',
+  macchiato: '#24273a',
+  mocha: '#1e1e2e',
+};
+
+interface Prefs {
+  pushEnabled?: boolean;
+  trustedUser?: string;
+  servedBy?: string;
+}
+
+const android = /Android/.test(navigator.userAgent);
+
 export function Settings() {
   const [theme, choose] = useState(getTheme);
+  const [prefs, setPrefs] = useState<Prefs>({});
+  const [haptics, setHaptics] = useState(() => localStorage.getItem('taut.haptics') !== 'off');
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((r) => r.json() as Promise<Prefs>)
+      .then(setPrefs)
+      .catch(() => {});
+  }, []);
+
+  const save = (next: Prefs) => {
+    setPrefs({ ...prefs, ...next });
+    void fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(next),
+    }).catch(() => {});
+  };
 
   return (
-    <div className="mx-auto max-w-2xl pb-16">
-      <header className="sticky top-0 z-10 flex min-h-14 items-center gap-1 bg-bg px-1 pt-[env(safe-area-inset-top)]">
-        <a href="#/" aria-label="All panes" className="flex size-11 shrink-0 items-center justify-center text-muted">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-            <path strokeLinecap="round" strokeLinejoin="round" d="m14.5 5-7 7 7 7" />
-          </svg>
-        </a>
-        <h1 className="text-[17px] font-semibold tracking-tight">Settings</h1>
+    <div className="mx-auto max-w-2xl pt-[env(safe-area-inset-top)] pb-28">
+      <header className="flex h-11 items-center px-4">
+        <h1 className="text-title tracking-tight">Settings</h1>
       </header>
 
-      <h2 className="label-caps mt-4 px-4 pb-1">Theme</h2>
-      <ul>
+      <h2 className="label-caps px-4 pt-3.5 pb-2">Theme</h2>
+      <div role="group" aria-label="Theme" className="hscroll flex gap-2 px-4 pb-1">
         {THEMES.map((t) => (
-          <li key={t} className="border-t border-border/60 first:border-0">
-            <button
-              type="button"
-              aria-pressed={theme === t}
-              onClick={() => {
-                setTheme(t);
-                choose(t);
-              }}
-              className="flex min-h-11 w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] active:bg-surface"
-            >
-              <span className="flex-1">{LABELS[t]}</span>
-              {theme === t && (
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" className="text-accent" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m5 12.5 4.5 4.5L19 7" />
-                </svg>
-              )}
-            </button>
-          </li>
+          <button
+            key={t}
+            type="button"
+            // The strip is wider than the phone, so the current theme must not start off-screen.
+            ref={(el) => {
+              if (el && theme === t) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            }}
+            aria-pressed={theme === t}
+            onClick={() => {
+              setTheme(t);
+              choose(t);
+            }}
+            className={`flex shrink-0 items-center gap-1.5 rounded-chip px-3 py-1.5 text-caption whitespace-nowrap ${
+              theme === t ? 'bg-accent font-semibold text-bg' : 'bg-surface font-medium text-muted'
+            }`}
+          >
+            {SWATCH[t] && (
+              <span aria-hidden className="size-2.5 rounded-full border border-border" style={{ background: SWATCH[t]! }} />
+            )}
+            {LABELS[t]}
+          </button>
         ))}
-      </ul>
+      </div>
+
+      <h2 className="label-caps px-4 pt-6 pb-1">Notifications</h2>
+      <Toggle
+        label="Push when an agent is blocked"
+        hint="Done shows as a badge only"
+        checked={prefs.pushEnabled ?? false}
+        onChange={(v) => save({ pushEnabled: v })}
+      />
+      {android && (
+        <>
+          <div className="ml-4 border-t border-border/60" />
+          <Toggle
+            label="Haptics"
+            hint="A short tap on send and on answering"
+            checked={haptics}
+            onChange={(v) => {
+              setHaptics(v);
+              localStorage.setItem('taut.haptics', v ? 'on' : 'off');
+            }}
+          />
+        </>
+      )}
+      <InstallHint />
+
+      <h2 className="label-caps px-4 pt-6 pb-1">Access</h2>
+      <div className="flex min-h-12 items-center gap-3 px-4 py-2">
+        <span className="flex-1 text-body">Trusted login</span>
+        <span className="truncate font-mono text-caption text-muted">{prefs.trustedUser || 'not set'}</span>
+      </div>
+      <div className="ml-4 border-t border-border/60" />
+      <div className="flex min-h-12 items-center gap-3 px-4 py-2">
+        <span className="flex-1 text-body">Served by</span>
+        <span className="truncate font-mono text-caption text-muted">{prefs.servedBy || location.host}</span>
+      </div>
     </div>
   );
 }

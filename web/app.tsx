@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { ScreenEvent, ScreenMode, State } from '../shared/types.ts';
-import { Home } from './home.tsx';
+import { flushSync } from 'react-dom';
+import type { AnchorHTMLAttributes } from 'react';
+import type { ScreenEvent, State } from '../shared/types.ts';
+import { Home, unseen } from './home.tsx';
+import { Hosts } from './hosts.tsx';
+import { AgentsTab, HostsTab, SettingsTab } from './icons.tsx';
+import { mockOpen } from './mock.ts';
 import { PaneScreen } from './pane.tsx';
 import { Settings } from './settings.tsx';
 
@@ -12,6 +17,9 @@ export type Theme = (typeof THEMES)[number];
 const dark = matchMedia('(prefers-color-scheme: dark)');
 
 export function getTheme(): Theme {
+  // `?mock&theme=latte` forces a theme, so a screenshot can reach one without touching storage.
+  const forced = new URLSearchParams(location.search).get('theme') as Theme | null;
+  if (forced && THEMES.includes(forced)) return forced;
   const t = localStorage.getItem('taut.theme') as Theme | null;
   return t && THEMES.includes(t) ? t : 'system';
 }
@@ -28,21 +36,30 @@ function applyTheme(theme: Theme) {
 applyTheme(getTheme());
 dark.addEventListener('change', () => applyTheme(getTheme()));
 
+export const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** A short tap, Android only, behind the Settings toggle. iOS has no web haptics. */
+export function haptic() {
+  if (!/Android/.test(navigator.userAgent)) return;
+  if (localStorage.getItem('taut.haptics') === 'off') return;
+  navigator.vibrate?.(8);
+}
+
 // ---- events ----
 
-/** One EventSource for the whole app. It reopens when the watched Pane or mode changes. */
-export function useEvents(paneKey?: string, mode?: ScreenMode) {
+/** One EventSource for the whole app. It reopens when the watched Pane changes. */
+export function useEvents(paneKey?: string) {
   const [state, setState] = useState<State | null>(null);
   const [screen, setScreen] = useState<ScreenEvent | null>(null);
   const [connected, setConnected] = useState(true);
   const [attempt, setAttempt] = useState(0);
 
-  useEffect(() => setScreen(null), [paneKey, mode]);
+  useEffect(() => setScreen(null), [paneKey]);
 
   useEffect(() => {
-    const url = paneKey
-      ? `/api/events?pane=${encodeURIComponent(paneKey)}&mode=${mode ?? 'visible'}`
-      : '/api/events';
+    // The Hub still serves `mode=recent`; taut's UI only ever shows the visible grid, and
+    // Wrap reflows it client-side. See docs/DESIGN.md "Terminal width on a phone".
+    const url = paneKey ? `/api/events?pane=${encodeURIComponent(paneKey)}&mode=visible` : '/api/events';
     const es = new EventSource(url);
     let retry: ReturnType<typeof setTimeout>;
     const on = <T,>(name: string, set: (v: T) => void) =>
@@ -63,49 +80,142 @@ export function useEvents(paneKey?: string, mode?: ScreenMode) {
       clearTimeout(retry);
       es.close();
     };
-  }, [paneKey, mode, attempt]);
+  }, [paneKey, attempt]);
 
   return { state, screen, connected };
 }
 
 // ---- router ----
 
+const path = () => location.hash.slice(1) || '/';
+let apply: ((route: string) => void) | null = null;
+
+/**
+ * Push a hash route. `pushState` keeps the history entry the iOS edge swipe and the
+ * Android back button need, and the View Transition wraps the synchronous re-render.
+ */
+export function navigate(to: string) {
+  if (to === location.hash) return;
+  const run = () => {
+    history.pushState(null, '', to);
+    flushSync(() => apply?.(path()));
+  };
+  const start = (document as { startViewTransition?: (cb: () => void) => unknown }).startViewTransition;
+  if (start && !reducedMotion()) start.call(document, run);
+  else run();
+}
+
+/** An `<a>` so the URL is real and long-press still offers "open in new tab". */
+export function Link({ to, ...rest }: { to: string } & AnchorHTMLAttributes<HTMLAnchorElement>) {
+  return (
+    <a
+      href={to}
+      {...rest}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+        e.preventDefault();
+        navigate(to);
+      }}
+    />
+  );
+}
+
 function useRoute() {
-  const [route, setRoute] = useState(() => location.hash.slice(1) || '/');
+  const [route, setRoute] = useState(path);
   useEffect(() => {
-    const on = () => setRoute(location.hash.slice(1) || '/');
+    apply = setRoute;
+    const on = () => setRoute(path());
     addEventListener('hashchange', on);
-    return () => removeEventListener('hashchange', on);
+    addEventListener('popstate', on);
+    return () => {
+      apply = null;
+      removeEventListener('hashchange', on);
+      removeEventListener('popstate', on);
+    };
   }, []);
   return route;
 }
 
+// ---- tab bar ----
+
+const TABS = [
+  { to: '#/', label: 'Agents', Icon: AgentsTab },
+  { to: '#/hosts', label: 'Hosts', Icon: HostsTab },
+  { to: '#/settings', label: 'Settings', Icon: SettingsTab },
+];
+
+function TabBar({ route, badge }: { route: string; badge: number }) {
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    // The keyboard must never cover a focused composer. One rule, both platforms.
+    const is = (t: EventTarget | null) => t instanceof HTMLElement && t.matches('input, textarea, [contenteditable]');
+    const down = (e: FocusEvent) => is(e.target) && setTyping(true);
+    const up = (e: FocusEvent) => is(e.target) && setTyping(false);
+    document.addEventListener('focusin', down);
+    document.addEventListener('focusout', up);
+    return () => {
+      document.removeEventListener('focusin', down);
+      document.removeEventListener('focusout', up);
+    };
+  }, []);
+  if (typing) return null;
+
+  return (
+    <nav
+      aria-label="Sections"
+      className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+8px)] z-40 flex h-13 items-center justify-around rounded-tabbar border border-border bg-elevated/88 px-2 shadow-elevated backdrop-blur-md"
+    >
+      {TABS.map(({ to, label, Icon }) => {
+        const on = to === `#${route}` || (to === '#/' && route === '/');
+        return (
+          <Link
+            key={to}
+            to={to}
+            aria-current={on ? 'page' : undefined}
+            className={`relative flex w-22 flex-col items-center gap-0.5 ${on ? 'text-accent' : 'text-muted'}`}
+          >
+            <Icon />
+            <span className={`text-[10px] tracking-[0.02em] ${on ? 'font-semibold' : 'font-medium'}`}>{label}</span>
+            {label === 'Agents' && badge > 0 && (
+              <span
+                aria-label={`${badge} need you`}
+                className="absolute -top-[3px] right-[22px] h-4 min-w-4 rounded-chip bg-warn px-1 text-center text-[10px] leading-4 font-bold text-bg"
+              >
+                {badge > 9 ? '9+' : badge}
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+// ---- app ----
+
 export function App() {
   const route = useRoute();
   const paneKey = route.startsWith('/pane/') ? decodeURIComponent(route.slice('/pane/'.length)) : undefined;
-  const [mode, setMode] = useState<ScreenMode>('visible');
-  useEffect(() => setMode('visible'), [paneKey]);
-
-  const { state, screen, connected } = useEvents(paneKey, paneKey ? mode : undefined);
+  const { state, screen, connected } = useEvents(paneKey);
+  const needsYou = state?.panes.filter((p) => p.status === 'blocked' && unseen(p)).length ?? 0;
 
   return (
     <>
       {!connected && (
-        <div
-          role="status"
-          className="fixed inset-x-0 top-0 z-50 h-0.5 animate-pulse bg-warn"
-          title="Reconnecting"
-        >
+        <div role="status" className="fixed inset-x-0 top-0 z-50 h-0.5 animate-pulse bg-warn" title="Reconnecting">
           <span className="sr-only">Reconnecting</span>
         </div>
       )}
       {paneKey ? (
-        <PaneScreen paneKey={paneKey} state={state} screen={screen} mode={mode} onMode={setMode} />
+        <PaneScreen paneKey={paneKey} state={state} screen={screen} />
+      ) : route === '/hosts' ? (
+        <Hosts state={state} />
       ) : route === '/settings' ? (
         <Settings />
       ) : (
         <Home state={state} />
       )}
+      {!paneKey && <TabBar route={route} badge={needsYou} />}
     </>
   );
 }
@@ -118,3 +228,6 @@ export function post(paneKey: string, path: 'input' | 'seen', body: unknown) {
     body: JSON.stringify(body),
   }).catch(() => {}); // ponytail: the SSE reconnect indicator is the only error surface in phase 1
 }
+
+/** `?mock&open=switch` lands a screenshot on an open drawer. Always false without `?mock`. */
+export const opensWith = (name: string) => mockOpen() === name;

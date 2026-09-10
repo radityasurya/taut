@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { Explain, Mux, Pane, Screen, ScreenMode, Tree, Workspace } from '../shared/types.ts';
+import { startHttp } from '../server/http.ts';
+import { hostId } from '../server/hosts.ts';
 import { Hub } from '../server/mux.ts';
 
 test('Hub adds tabs, status timestamps, and cached agent last lines', async () => {
@@ -32,4 +34,36 @@ test('Hub adds tabs, status timestamps, and cached agent last lines', async () =
   expect((await hub.state()).panes[0]!.statusChangedAt).toBeGreaterThan(firstAt);
   expect(reads).toBe(1);
   hub.close();
+});
+
+test('host retry runs discovery and returns the refreshed host', async () => {
+  let discoveries = 0;
+  let refreshes = 0;
+  let handle: ((request: Request) => Response | Promise<Response>) | undefined;
+  const hub = {
+    hasMux: () => true,
+    add: () => {},
+    refreshHost: async (id: string) => { expect(id).toBe(hostId); refreshes++; },
+    state: async () => ({
+      hosts: [{ id: hostId, label: hostId, online: true, source: 'local' as const }],
+      muxes: [], workspaces: [], tabs: [], panes: [],
+    }),
+  } as unknown as Hub;
+  const serve = Bun.serve;
+  try {
+    Bun.serve = ((options: { fetch: typeof handle }) => { handle = options.fetch; return {} as ReturnType<typeof Bun.serve>; }) as typeof Bun.serve;
+    startHttp(hub, {
+      port: 0, hostname: '127.0.0.1', staticDir: import.meta.dir,
+      discover: async () => { discoveries++; return [{ id: 'fake', socketPath: '/unused' }]; },
+    });
+  } finally {
+    Bun.serve = serve;
+  }
+  const response = await handle!(new Request(`http://taut.test/api/hosts/${encodeURIComponent(hostId)}/retry`, {
+    method: 'POST', headers: { host: 'taut.test', origin: 'http://taut.test' },
+  }));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ id: hostId, label: hostId, online: true, source: 'local' });
+  expect(discoveries).toBe(1);
+  expect(refreshes).toBe(1);
 });

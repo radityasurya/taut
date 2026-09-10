@@ -1,107 +1,354 @@
-import type { State, StatePane, Status } from '../shared/types.ts';
+import { useEffect, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { State, StatePane, StateWorkspace, Status } from '../shared/types.ts';
+import { Link, opensWith } from './app.tsx';
+import { ChevronDown, ChevronRight, Plus } from './icons.tsx';
+import { Skeleton } from '@/components/ui/skeleton.tsx';
+import { MenuSheet, NewTabSheet, NewWorkspaceSheet, RenameSheet } from './sheets.tsx';
 
-const DOT: Record<Status, string> = {
-  blocked: 'bg-warn',
-  working: 'bg-accent',
-  done: 'bg-ok',
-  idle: 'bg-muted',
-  unknown: 'bg-border',
+// ---- status ----
+
+const COLOR: Record<Status, string> = {
+  blocked: 'var(--warn)',
+  working: 'var(--accent)',
+  done: 'var(--ok)',
+  idle: 'var(--muted)',
+  unknown: 'var(--muted)',
 };
 
-export function Dot({ status }: { status: Status }) {
+export const statusText: Record<Status, string> = {
+  blocked: 'text-warn',
+  working: 'text-accent',
+  done: 'text-ok',
+  idle: 'text-muted',
+  unknown: 'text-muted',
+};
+
+/** 8 px by default. Filled means unseen; a 1.5 px ring means seen. Decoration only: the
+ *  row's `aria-label` and the printed status word carry the fact. */
+export function Dot({ status, seen, size = 8 }: { status: Status; seen?: boolean; size?: number }) {
+  const c = COLOR[status];
   return (
-    <>
-      <span aria-hidden className={`size-2 shrink-0 rounded-full ${DOT[status]}`} />
-      <span className="sr-only">{status}</span>
-    </>
+    <span
+      aria-hidden
+      className="shrink-0 rounded-full"
+      style={{ width: size, height: size, boxSizing: 'border-box', ...(seen ? { border: `1.5px solid ${c}` } : { background: c }) }}
+    />
   );
 }
 
-const unseen = (p: StatePane) => p.revision > p.seenRevision;
+// ---- seen ----
+// taut's own flag, never written back to the Mux: a Pane is seen once it was opened after
+// its Status last changed. One localStorage map, read through a module cache.
 
-// Seen `done` sits between `working` and `idle`: it is finished work you have already looked at.
-const RANK: Record<Status, number> = { blocked: 2, working: 3, done: 4, idle: 5, unknown: 6 };
-const rank = (p: StatePane) => {
-  if (unseen(p) && p.status === 'blocked') return 0;
-  if (unseen(p) && p.status === 'done') return 1;
-  return RANK[p.status];
-};
+let seenAt: Record<string, number> | null = null;
+const seen = () => (seenAt ??= JSON.parse(localStorage.getItem('taut.seen') ?? '{}') as Record<string, number>);
 
+export function markSeen(key: string) {
+  seen()[key] = Date.now();
+  localStorage.setItem('taut.seen', JSON.stringify(seen()));
+}
+
+/**
+ * `idle` means the user already looked (CONTEXT.md) and `unknown` is all tmux can report,
+ * so neither can be unseen. Falls back to the revision counter on a Hub that does not
+ * send `statusChangedAt` yet.
+ */
+export const unseen = (p: StatePane) =>
+  p.status !== 'idle' &&
+  p.status !== 'unknown' &&
+  (p.statusChangedAt ? (seen()[p.key] ?? 0) < p.statusChangedAt : p.revision > p.seenRevision);
+
+export function timeAgo(at?: number): string {
+  if (!at) return '';
+  const s = Math.max(0, Date.now() - at) / 1000;
+  if (s < 45) return 'now';
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.round(m / 60);
+  return h < 24 ? `${h}h` : `${Math.round(h / 24)}d`;
+}
+
+const RANK: Record<Status, number> = { blocked: 0, working: 1, done: 2, idle: 3, unknown: 4 };
 const basename = (cwd?: string) => cwd?.replace(/\/+$/, '').split('/').pop();
 
+/** Blocked reason, else the last non-empty screen line, else the directory. */
+const preview = (p: StatePane) => p.lastLine ?? basename(p.cwd) ?? '';
+
+/** The most urgent status present, as the collapsed group's one-line summary. */
+function summary(panes: StatePane[]): string {
+  for (const s of Object.keys(RANK) as Status[]) {
+    const n = panes.filter((p) => p.status === s).length;
+    if (n) return `${n} ${s}`;
+  }
+  return '';
+}
+
+// ---- rows ----
+
+function Row({ pane, first }: { pane: StatePane; first?: boolean }) {
+  const fresh = unseen(pane);
+  const word = pane.status === 'blocked' ? 'Blocked' : pane.status === 'done' ? 'Done' : '';
+  const when = timeAgo(pane.statusChangedAt);
+  return (
+    <li className={first ? '' : 'border-t border-border/60'}>
+      <Link
+        to={`#/pane/${encodeURIComponent(pane.key)}`}
+        aria-label={[pane.agent ?? 'shell', pane.title, pane.status, fresh ? 'unseen' : 'seen', when]
+          .filter(Boolean)
+          .join(', ')}
+        className="flex min-h-14 items-center gap-3 px-4 py-2.5 active:bg-surface"
+      >
+        <Dot status={pane.status} seen={!fresh} />
+        <span aria-hidden className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex min-w-0 items-baseline gap-2">
+            <span className="shrink-0 text-body text-muted">{pane.agent ?? 'shell'}</span>
+            <span className={`truncate text-body ${fresh ? 'font-medium text-fg' : 'text-muted'}`}>{pane.title}</span>
+          </span>
+          <span className={`truncate text-caption text-muted ${pane.lastLine ? '' : 'font-mono'}`}>
+            {word && <span className={statusText[pane.status]}>{word} · </span>}
+            {preview(pane)}
+          </span>
+        </span>
+        <span aria-hidden className="shrink-0 font-mono text-caption tabular-nums text-muted">
+          {when}
+        </span>
+      </Link>
+    </li>
+  );
+}
+
+/** 500 ms, cancelled by 10 px of movement, so a scroll never opens the menu. */
+function useLongPress(fn: () => void) {
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const from = useRef({ x: 0, y: 0 });
+  const stop = () => clearTimeout(timer.current);
+  useEffect(() => stop, []);
+  return {
+    onPointerDown: (e: ReactPointerEvent) => {
+      from.current = { x: e.clientX, y: e.clientY };
+      timer.current = setTimeout(fn, 500);
+    },
+    onPointerMove: (e: ReactPointerEvent) => {
+      if (Math.hypot(e.clientX - from.current.x, e.clientY - from.current.y) > 10) stop();
+    },
+    onPointerUp: stop,
+    onPointerCancel: stop,
+  };
+}
+
+/** The Workspace group header: tap collapses, long-press opens the group menu. */
+function GroupHeader({
+  label,
+  host,
+  summary,
+  open,
+  onToggle,
+  onMenu,
+}: {
+  label: string;
+  host?: string;
+  summary: string;
+  open: boolean;
+  onToggle: () => void;
+  onMenu: () => void;
+}) {
+  const press = useLongPress(onMenu);
+  return (
+    <h2>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        {...press}
+        className="label-caps flex w-full items-center px-4 pt-6 pb-1.5 text-left [-webkit-touch-callout:none]"
+      >
+        {open ? <ChevronDown className="mr-1.5 shrink-0" /> : <ChevronRight className="mr-1.5 shrink-0" />}
+        {label}
+        {host && <span className="ml-1.5 font-medium tracking-normal normal-case text-muted">· {host}</span>}
+        <span className="ml-auto pl-2 font-medium tracking-normal normal-case text-muted">{summary}</span>
+      </button>
+    </h2>
+  );
+}
+
+// ---- screen ----
+
+const COLLAPSED = 'taut.collapsed';
+const readCollapsed = (): string[] => JSON.parse(localStorage.getItem(COLLAPSED) ?? '[]') as string[];
+
 export function Home({ state }: { state: State | null }) {
-  const groups = state
-    ? state.workspaces
-        .map((w) => ({
-          key: w.key,
-          label: w.label,
-          panes: state.panes.filter((p) => p.muxKey === w.muxKey && p.workspaceId === w.id).sort((a, b) => rank(a) - rank(b)),
-        }))
-        .filter((g) => g.panes.length > 0)
-    : [];
+  const [host, setHost] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [newWorkspace, setNewWorkspace] = useState(() => opensWith('newworkspace'));
+  const [newTab, setNewTab] = useState<StateWorkspace | null>(null);
+  const [menu, setMenu] = useState<StateWorkspace | null>(null);
+  const [rename, setRename] = useState<StateWorkspace | null>(null);
+
+  const toggle = (key: string) => {
+    const next = collapsed.includes(key) ? collapsed.filter((k) => k !== key) : [...collapsed, key];
+    setCollapsed(next);
+    localStorage.setItem(COLLAPSED, JSON.stringify(next));
+  };
+
+  const hostOf = (muxKey: string) => state?.muxes.find((m) => m.key === muxKey)?.hostId;
+  const hostLabel = (muxKey: string) => state?.hosts.find((h) => h.id === hostOf(muxKey))?.label;
+  const panesOf = (w: StateWorkspace) =>
+    (state?.panes ?? []).filter((p) => p.muxKey === w.muxKey && p.workspaceId === w.id).sort((a, b) => RANK[a.status] - RANK[b.status]);
+
+  const visible = (muxKey: string) => !host || hostOf(muxKey) === host;
+  const needsYou = (state?.panes ?? []).filter((p) => visible(p.muxKey) && unseen(p) && (p.status === 'blocked' || p.status === 'done'));
+  const groups = (state?.workspaces ?? [])
+    .filter((w) => visible(w.muxKey))
+    .map((w) => {
+      const hostId = hostOf(w.muxKey);
+      return {
+        w,
+        host: state?.hosts.find((h) => h.id === hostId),
+        panes: panesOf(w).filter((p) => !needsYou.includes(p)),
+      };
+    })
+    .filter((g) => g.panes.length > 0 || g.host?.online === false);
+
+  const tabIn = newTab ?? (opensWith('newtab') ? (groups[0]?.w ?? null) : null);
+  const counts = state && `${state.hosts.length} host${state.hosts.length === 1 ? '' : 's'} · ${state.panes.length} panes`;
 
   return (
-    <div className="mx-auto max-w-2xl pb-16">
-      <header className="sticky top-0 z-10 flex min-h-14 items-center justify-between bg-bg px-4 pt-[env(safe-area-inset-top)]">
-        <h1 className="text-[17px] font-semibold tracking-tight">taut</h1>
-        <a
-          href="#/settings"
-          aria-label="Settings"
-          className="-mr-2.5 flex size-11 items-center justify-center rounded-full text-muted hover:text-fg"
-        >
-          <GearIcon />
-        </a>
+    <div className="mx-auto max-w-2xl pt-[env(safe-area-inset-top)] pb-28">
+      <header className="flex h-11 items-center justify-between px-4">
+        <h1 className="text-title tracking-tight">taut</h1>
+        <div className="flex items-center gap-1">
+          <span className="mr-1.5 text-caption tabular-nums text-muted">{counts}</span>
+          <button
+            type="button"
+            aria-label="New Workspace"
+            onClick={() => setNewWorkspace(true)}
+            className="-mr-2.5 flex size-11 items-center justify-center text-accent"
+          >
+            <Plus size={22} />
+          </button>
+        </div>
       </header>
 
-      {!state ? (
-        <p className="px-4 py-6 text-sm text-muted">Connecting…</p>
-      ) : groups.length === 0 ? (
-        <p className="px-4 py-6 text-sm leading-relaxed text-muted">No panes. Is herdr running on this Host?</p>
-      ) : (
-        groups.map((g) => (
-          <section key={g.key} className="mt-5 first:mt-2">
-            <h2 className="label-caps px-4 pb-1">{g.label}</h2>
-            <ul>
-              {g.panes.map((p) => (
-                <li key={p.key} className="border-t border-border/60 first:border-0">
-                  <a
-                    href={`#/pane/${encodeURIComponent(p.key)}`}
-                    className="flex min-h-11 items-center gap-3 px-4 py-2.5 active:bg-surface"
-                  >
-                    <Dot status={p.status} />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-baseline gap-2">
-                        <span
-                          className={`shrink-0 text-[15px] ${
-                            p.agent ? (unseen(p) ? 'font-medium text-fg' : 'text-muted') : 'text-muted'
-                          }`}
-                        >
-                          {p.agent ?? 'shell'}
-                        </span>
-                        <span className={`truncate text-[15px] ${unseen(p) ? 'text-fg' : 'text-muted'}`}>{p.title}</span>
-                      </span>
-                      {p.cwd && <span className="mt-0.5 block truncate text-xs text-muted">{basename(p.cwd)}</span>}
-                    </span>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))
+      {state && state.hosts.length > 1 && (
+        <div role="group" aria-label="Filter by Host" className="hscroll flex gap-2 px-4 pt-1.5 pb-0.5">
+          {[{ id: null, label: 'All', online: true }, ...state.hosts].map((h) => (
+            <button
+              key={h.id ?? 'all'}
+              type="button"
+              aria-pressed={host === h.id}
+              onClick={() => setHost(h.id)}
+              className={`shrink-0 rounded-chip px-3 py-1.5 text-caption ${
+                host === h.id ? 'bg-accent font-semibold text-bg' : 'bg-surface font-medium text-muted'
+              } ${h.online ? '' : 'line-through'}`}
+            >
+              {h.label}
+            </button>
+          ))}
+        </div>
       )}
+
+      {!state ? (
+        <ul aria-busy className="pt-6">
+          {[0, 1, 2].map((i) => (
+            <li key={i} className="flex min-h-14 items-center gap-3 px-4 py-2.5">
+              <Skeleton className="size-2 rounded-full" />
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <Skeleton className="h-3.5 w-1/2" />
+                <Skeleton className="h-3 w-3/4" />
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : needsYou.length === 0 && groups.length === 0 ? (
+        <div className="flex flex-col items-start gap-3 px-4 pt-8">
+          <p className="text-body text-muted">No panes yet.</p>
+          <Link to="#/hosts" className="text-body font-medium text-accent">
+            Add a Host
+          </Link>
+        </div>
+      ) : (
+        <>
+          {needsYou.length > 0 && (
+            <section>
+              <h2 className="label-caps px-4 pt-3.5 pb-1.5">Needs you</h2>
+              <ul>
+                {needsYou.map((p, i) => (
+                  <Row key={p.key} pane={p} first={i === 0} />
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {groups.map(({ w, host: h, panes }) => {
+            const shut = collapsed.includes(w.key);
+            return (
+              <section key={w.key}>
+                <GroupHeader
+                  label={w.label}
+                  host={h?.label}
+                  summary={summary(panes)}
+                  open={!shut}
+                  onToggle={() => toggle(w.key)}
+                  onMenu={() => setMenu(w)}
+                />
+                {!shut && (
+                  <ul>
+                    {panes.map((p, i) => (
+                      <Row key={p.key} pane={p} first={i === 0} />
+                    ))}
+                    {h?.online === false && (
+                      <li>
+                        <Link
+                          to="#/hosts"
+                          className="flex min-h-11 items-center gap-3 px-4 py-2.5 active:bg-surface"
+                          aria-label={`${h.label} unreachable, ${h.error ?? 'offline'}. Open Hosts`}
+                        >
+                          <span aria-hidden className="size-2 shrink-0 rounded-full bg-danger" />
+                          <span aria-hidden className="min-w-0 flex-1 truncate text-[13px] text-muted">
+                            <span className="text-danger">{h.label} unreachable</span> · {h.error}
+                          </span>
+                          <span aria-hidden className="shrink-0 text-caption text-accent">
+                            Hosts ›
+                          </span>
+                        </Link>
+                      </li>
+                    )}
+                  </ul>
+                )}
+              </section>
+            );
+          })}
+        </>
+      )}
+
+      <NewWorkspaceSheet open={newWorkspace} onClose={() => setNewWorkspace(false)} onSubmit={noop} />
+      <NewTabSheet
+        open={tabIn !== null}
+        onClose={() => setNewTab(null)}
+        cwd={tabIn?.cwd}
+        where={
+          <>
+            in <span className="text-fg">{tabIn?.label}</span> · {hostLabel(tabIn?.muxKey ?? '')}
+          </>
+        }
+        onSubmit={noop}
+      />
+      <MenuSheet
+        open={menu !== null}
+        title={menu?.label ?? ''}
+        onClose={() => setMenu(null)}
+        items={[
+          { label: 'New Tab', onClick: () => setNewTab(menu) },
+          { label: 'Rename', onClick: () => setRename(menu) },
+          { label: collapsed.includes(menu?.key ?? '') ? 'Expand' : 'Collapse', onClick: () => menu && toggle(menu.key) },
+        ]}
+      />
+      <RenameSheet open={rename !== null} kind="Workspace" current={rename?.label ?? ''} onClose={() => setRename(null)} onSubmit={noop} />
     </div>
   );
 }
 
-export function GearIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
-      <circle cx="12" cy="12" r="3.2" />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.7 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.7 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.7a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.01c.2.5.66.87 1.2.99H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"
-      />
-    </svg>
-  );
-}
+// ponytail: creation and rename reach herdr in phase 7. The live Mux is read-only today,
+// so the drawers close and change nothing.
+const noop = () => {};

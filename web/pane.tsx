@@ -1,26 +1,42 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { parseAnsi } from '../shared/ansi.ts';
-import type { InputBody, ScreenEvent, ScreenMode, SeenBody, Span, State } from '../shared/types.ts';
-import { post } from './app.tsx';
-import { Dot } from './home.tsx';
+import type { Explain, InputBody, ScreenEvent, SeenBody, Span, State, StatePane, Status } from '../shared/types.ts';
+import { haptic, navigate, opensWith, post } from './app.tsx';
+import { Blocked } from './blocked.tsx';
+import { Dot, markSeen, statusText } from './home.tsx';
+import { Attach, Back, Down, Mic, More, Plus, Send, Speaker, Switch2 } from './icons.tsx';
+import { ConfirmCloseSheet, MenuSheet, NewTabSheet, RenameSheet } from './sheets.tsx';
+import { SwitchDrawer } from './switch.tsx';
 
-/** herdr key names, with the label shown on the button. */
-const KEYS: [name: string, label: string][] = [
+/** herdr key names, with the label shown on the cap. Ordered by real use, agent first. */
+const AGENT_KEYS: [name: string, label: string][] = [
   ['esc', 'esc'],
+  ['up', '↑'],
+  ['down', '↓'],
   ['tab', 'tab'],
   ['shift+tab', 'shift+tab'],
+  ['enter', 'enter'],
+  ['ctrl+c', 'ctrl+c'],
+];
+const SHELL_KEYS: [name: string, label: string][] = [
+  ['esc', 'esc'],
+  ['tab', 'tab'],
   ['up', '↑'],
   ['down', '↓'],
   ['left', '←'],
   ['right', '→'],
   ['enter', 'enter'],
   ['ctrl+c', 'ctrl+c'],
+  ['ctrl+d', 'ctrl+d'],
+  ['ctrl+l', 'ctrl+l'],
+  ['ctrl+r', 'ctrl+r'],
 ];
 
 const color = (c: number | string | undefined) => (typeof c === 'number' ? `var(--ansi-${c})` : c);
 
-function spanStyle(s: Span): CSSProperties {
+/** The one ANSI-span style function. blocked.tsx renders the detection with it too. */
+export function spanStyle(s: Span): CSSProperties {
   let fg = color(s.fg);
   let bg = color(s.bg);
   if (s.inverse) [fg, bg] = [bg ?? 'var(--bg)', fg ?? 'var(--fg)'];
@@ -35,36 +51,146 @@ function spanStyle(s: Span): CSSProperties {
   };
 }
 
-export function PaneScreen({
-  paneKey,
-  state,
-  screen,
-  mode,
-  onMode,
-}: {
-  paneKey: string;
-  state: State | null;
-  screen: ScreenEvent | null;
-  mode: ScreenMode;
-  onMode: (m: ScreenMode) => void;
-}) {
+/** Styled ANSI text. Shared by the grid and the blocked card's detection excerpt. */
+export function Ansi({ text }: { text: string }) {
+  return (
+    <>
+      {parseAnsi(text).map((spans, i) => (
+        <Fragment key={i}>
+          {spans.map((s, j) => (
+            <span key={j} style={spanStyle(s)}>
+              {s.text}
+            </span>
+          ))}
+          {'\n'}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+const ROLL: Status[] = ['blocked', 'working', 'done', 'idle', 'unknown'];
+const rollUp = (panes: StatePane[]): Status => ROLL.find((s) => panes.some((p) => p.status === s)) ?? 'unknown';
+
+/** The Pane a Tab reopens to, so switching back lands where you left. */
+const lastPane = new Map<string, string>();
+
+const plain = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, '');
+
+/** "Wider than the viewport" is a fade, not a scrollbar. */
+const FADE = 'linear-gradient(to right,#000 calc(100% - 24px),transparent)';
+
+/** The last block the agent printed, for read-aloud. */
+function lastBlock(text?: string): string {
+  if (!text) return '';
+  const blocks = plain(text)
+    .split(/\n\s*\n/)
+    .map((b) => b.trim())
+    .filter(Boolean);
+  return blocks.at(-1) ?? '';
+}
+
+interface Recognition {
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state: State | null; screen: ScreenEvent | null }) {
   const pane = state?.panes.find((p) => p.key === paneKey);
+  const ws = state?.workspaces.find((w) => w.muxKey === pane?.muxKey && w.id === pane?.workspaceId);
+  const host = state?.hosts.find((h) => h.id === state.muxes.find((m) => m.key === pane?.muxKey)?.hostId);
   const lines = useMemo(() => (screen ? parseAnsi(screen.text) : []), [screen]);
+
+  const [wrap, setWrap] = useState(false);
+  const [fit, setFit] = useState(false);
+  const [scale, setScale] = useState(1);
+  const [fade, setFade] = useState(false);
+  const [fresh, setFresh] = useState(false);
+  const [explain, setExplain] = useState<Explain | null>(null);
+  const [showSwitch, setShowSwitch] = useState(() => opensWith('switch'));
+  const [showMore, setShowMore] = useState(() => opensWith('more'));
+  const [showNewTab, setShowNewTab] = useState(() => opensWith('newtab'));
+  const [rename, setRename] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
 
   // Keep the view pinned to the bottom unless the user scrolled up.
   const box = useRef<HTMLDivElement>(null);
+  const pre = useRef<HTMLPreElement>(null);
   const pinned = useRef(true);
+
+  const measure = () => {
+    const el = box.current;
+    if (!el) return;
+    setFade(el.scrollWidth > el.clientWidth + 1 && el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  };
+
   useEffect(() => {
     const el = box.current;
     if (el && pinned.current) el.scrollTop = el.scrollHeight;
+    else if (lines.length) setFresh(true);
+    measure();
   }, [lines]);
 
-  // Mark Seen once the screen settles.
+  useEffect(() => {
+    addEventListener('resize', measure);
+    return () => removeEventListener('resize', measure);
+  }, []);
+
+  useEffect(() => {
+    const el = pre.current;
+    if (!el || !el.parentElement) return setScale(1);
+    setScale(fit ? Math.min(1, el.parentElement.clientWidth / el.scrollWidth) : 1);
+    measure();
+  }, [fit, wrap, lines]);
+
+  // Mark Seen once the screen settles: Seen is taut's own flag, never written to the Mux.
   useEffect(() => {
     if (!screen) return;
+    markSeen(paneKey);
     const t = setTimeout(() => void post(paneKey, 'seen', { revision: screen.revision } satisfies SeenBody), 1000);
     return () => clearTimeout(t);
   }, [paneKey, screen?.revision]);
+
+  useEffect(() => {
+    if (pane) lastPane.set(`${pane.muxKey}/${pane.tabId}`, pane.key);
+  }, [pane?.key]);
+
+  // The blocked card outlives the status by 150 ms, so it fades instead of vanishing.
+  useEffect(() => {
+    if (pane?.status === 'blocked') {
+      fetch(`/api/panes/${encodeURIComponent(paneKey)}/explain`)
+        .then((r) => r.json() as Promise<Explain | null>)
+        .then(setExplain)
+        .catch(() => {});
+      return;
+    }
+    if (!explain) return;
+    const t = setTimeout(() => setExplain(null), 150);
+    return () => clearTimeout(t);
+  }, [paneKey, pane?.status, pane?.revision]);
+
+  const tabs = useMemo(() => {
+    if (!state || !pane) return [];
+    const mine = state.panes.filter((p) => p.muxKey === pane.muxKey && p.workspaceId === pane.workspaceId);
+    const listed = state.tabs.filter((t) => t.muxKey === pane.muxKey && t.workspaceId === pane.workspaceId);
+    const ids = listed.length ? listed.map((t) => [t.id, t.label] as const) : [...new Set(mine.map((p) => p.tabId))].map((id) => [id, ''] as const);
+    return ids.map(([id, label]) => {
+      const panes = mine.filter((p) => p.tabId === id);
+      return { id, label: label || panes[0]?.title || id, panes, status: rollUp(panes) };
+    });
+  }, [state, pane?.muxKey, pane?.workspaceId]);
+
+  const openTab = (id: string) => {
+    const tab = tabs.find((t) => t.id === id);
+    const next = lastPane.get(`${pane?.muxKey}/${id}`) ?? tab?.panes[0]?.key;
+    if (!next || next === paneKey) return;
+    haptic();
+    navigate(`#/pane/${encodeURIComponent(next)}`);
+  };
 
   const [text, setText] = useState('');
   const input = useRef<HTMLTextAreaElement>(null);
@@ -77,122 +203,352 @@ export function PaneScreen({
 
   const send = () => {
     if (!text.trim()) return;
+    haptic();
     void post(paneKey, 'input', { text, keys: ['enter'] } satisfies InputBody);
     setText('');
     input.current?.focus();
   };
 
+  const keys = (names: string[]) => {
+    haptic();
+    void post(paneKey, 'input', { keys: names } satisfies InputBody);
+  };
+
+  const speak = () => {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    if (synth.speaking) return synth.cancel();
+    synth.speak(new SpeechSynthesisUtterance(lastBlock(screen?.text)));
+  };
+
+  const swipe = useRef(0);
+  const rec = useRef<Recognition | null>(null);
+  const [listening, setListening] = useState(false);
+  const dictate = () => {
+    if (rec.current) {
+      rec.current.stop();
+      return;
+    }
+    const Ctor = (window as unknown as { webkitSpeechRecognition?: new () => Recognition }).webkitSpeechRecognition;
+    if (!Ctor) return;
+    const r = new Ctor();
+    r.continuous = false;
+    r.interimResults = false;
+    // Dictation lands in the field for review; it never sends. See docs/DECISIONS.md.
+    r.onresult = (e) => setText((t) => `${t}${t && !t.endsWith(' ') ? ' ' : ''}${e.results[0]?.[0]?.transcript ?? ''}`);
+    r.onend = () => {
+      rec.current = null;
+      setListening(false);
+    };
+    rec.current = r;
+    setListening(true);
+    r.start();
+  };
+
   if (state && !pane) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col items-start gap-3 px-4 pt-[calc(env(safe-area-inset-top)+4rem)]">
-        <p className="text-[15px]">Pane closed</p>
-        <a href="#/" className="text-[15px] text-accent">
+        <p className="text-body">Pane closed</p>
+        <a href="#/" className="text-body text-accent">
           ‹ All panes
         </a>
       </div>
     );
   }
 
-  const wrap = (screen?.mode ?? mode) === 'recent';
+  const agent = pane?.agent;
+  const status = pane?.status ?? 'unknown';
+  const active = tabs.find((t) => t.id === pane?.tabId);
+  const grid = pane?.cols && pane.rows ? `${pane.cols}×${pane.rows}` : 'fit';
 
   return (
-    <div className="mx-auto flex h-dvh max-w-2xl flex-col">
-      <header className="flex min-h-14 items-center gap-1 border-b border-border/60 bg-bg px-1 pt-[env(safe-area-inset-top)]">
-        <a href="#/" aria-label="All panes" className="flex size-11 shrink-0 items-center justify-center text-muted">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-            <path strokeLinecap="round" strokeLinejoin="round" d="m14.5 5-7 7 7 7" />
-          </svg>
+    <div className="mx-auto flex h-dvh max-w-2xl flex-col pt-[env(safe-area-inset-top)]">
+      <header className="flex h-11 shrink-0 items-center gap-1 pr-2 pl-1">
+        <a href="#/" aria-label="All panes" className="flex size-11 shrink-0 items-center justify-center text-accent">
+          <Back />
         </a>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-medium">{pane?.title ?? '…'}</div>
-          <div className="flex items-center gap-1.5 text-xs text-muted">
-            {pane && <Dot status={pane.status} />}
-            <span aria-hidden>{pane?.status}</span>
-          </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <h1 className="truncate text-title tracking-tight">{pane?.title ?? '…'}</h1>
+          <button
+            type="button"
+            onClick={() => setShowSwitch(true)}
+            aria-label="Switch Pane"
+            className="flex min-w-0 items-center gap-1.5 text-caption text-muted"
+          >
+            <Dot status={status} />
+            <span aria-live="polite" className={statusText[status]}>
+              {status}
+            </span>
+            <span className="truncate">
+              · {agent ?? 'shell'} · {ws?.label}
+            </span>
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden className="shrink-0">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
         </div>
-        <div role="group" aria-label="Screen mode" className="mr-1 flex shrink-0 gap-0.5 rounded-full bg-surface p-0.5">
-          {(['visible', 'recent'] as const).map((m) => (
+        <button
+          type="button"
+          aria-label="Switch Pane"
+          onClick={() => setShowSwitch(true)}
+          className="flex h-11 w-10 shrink-0 items-center justify-center text-muted"
+        >
+          <Switch2 />
+        </button>
+        {agent && (
+          <button
+            type="button"
+            aria-label="Read aloud"
+            onClick={speak}
+            className="flex h-11 w-10 shrink-0 items-center justify-center text-muted"
+          >
+            <Speaker />
+          </button>
+        )}
+        <button
+          type="button"
+          aria-label="More"
+          onClick={() => setShowMore(true)}
+          className="flex h-11 w-10 shrink-0 items-center justify-center text-muted"
+        >
+          <More />
+        </button>
+      </header>
+
+      {/* Tab strip, browser-tab position. Swipe here, never on the grid. */}
+      <div
+        className="flex shrink-0 items-center pt-0.5 pr-3 pb-2 pl-2"
+        onPointerDown={(e) => (swipe.current = e.clientX)}
+        onPointerUp={(e) => {
+          const dx = e.clientX - swipe.current;
+          if (Math.abs(dx) < 40 || !active) return;
+          const i = tabs.indexOf(active) + (dx < 0 ? 1 : -1);
+          if (tabs[i]) openTab(tabs[i].id);
+        }}
+      >
+        <div role="tablist" aria-label="Tabs" className="hscroll mx-1 flex flex-1 items-end gap-0.5 border-b border-border">
+          {tabs.map((t) => {
+            const on = t.id === pane?.tabId;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => openTab(t.id)}
+                className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-2.5 pt-2 pb-2.5 text-[13px] whitespace-nowrap ${
+                  on ? 'border-accent font-semibold text-fg' : 'border-transparent font-medium text-muted'
+                }`}
+              >
+                <Dot status={t.status} seen={t.status === 'idle' || t.status === 'unknown'} size={6} />
+                {t.label}
+                {t.panes.length > 1 && <span className="ml-0.5 font-mono text-[10px] text-muted">{t.panes.length}</span>}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          aria-label="New Tab"
+          onClick={() => setShowNewTab(true)}
+          className="mr-1.5 flex size-9 shrink-0 items-center justify-center text-accent"
+        >
+          <Plus />
+        </button>
+        <button
+          type="button"
+          aria-pressed={fit}
+          onClick={() => setFit(!fit)}
+          className={`shrink-0 rounded-chip border px-2.5 py-[5px] font-mono text-[11px] ${
+            fit ? 'border-accent bg-accent font-semibold text-bg' : 'border-border text-muted'
+          }`}
+        >
+          {grid}
+          {fit && ' · fit'}
+        </button>
+      </div>
+
+      {active && active.panes.length > 1 && (
+        <div role="group" aria-label="Panes in this Tab" className="hscroll flex shrink-0 gap-1.5 px-3 pb-2">
+          {active.panes.map((p) => (
             <button
-              key={m}
+              key={p.key}
               type="button"
-              aria-pressed={mode === m}
-              onClick={() => onMode(m)}
-              className={`rounded-full px-2.5 py-1.5 text-xs ${mode === m ? 'bg-bg font-medium text-fg' : 'text-muted'}`}
+              aria-current={p.key === paneKey ? 'true' : undefined}
+              onClick={() => {
+                haptic();
+                navigate(`#/pane/${encodeURIComponent(p.key)}`);
+              }}
+              className={`flex shrink-0 items-center gap-1.5 rounded-chip px-2.5 py-1 text-[12px] ${
+                p.key === paneKey ? 'bg-surface font-medium text-fg' : 'text-muted'
+              }`}
             >
-              {m}
+              <Dot status={p.status} size={6} seen={p.key !== paneKey} />
+              {p.agent ?? 'shell'}
             </button>
           ))}
         </div>
-      </header>
+      )}
 
-      <div
-        ref={box}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-        }}
-        className="flex-1 overflow-auto px-3 py-2"
-      >
-        <pre
-          className={`w-max min-w-full font-mono text-[12px] leading-[1.35] ${wrap ? 'whitespace-pre-wrap' : 'whitespace-pre'}`}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={box}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+            if (pinned.current) setFresh(false);
+            measure();
+          }}
+          className="h-full overflow-auto pt-1 pb-2 pl-4"
+          style={
+            fade
+              ? {
+                  maskImage: FADE,
+                  WebkitMaskImage: FADE,
+                }
+              : undefined
+          }
         >
-          {lines.map((spans, i) => (
-            <Fragment key={i}>
-              {spans.map((s, j) => (
-                <span key={j} style={spanStyle(s)}>
-                  {s.text}
-                </span>
-              ))}
-              {'\n'}
-            </Fragment>
-          ))}
-        </pre>
+          <pre
+            ref={pre}
+            className={`w-max min-w-full font-mono text-caption ${wrap ? 'whitespace-pre-wrap' : 'whitespace-pre'}`}
+            style={scale < 1 ? { transform: `scale(${scale})`, transformOrigin: 'top left' } : undefined}
+          >
+            {lines.map((spans, i) => (
+              <Fragment key={i}>
+                {spans.map((sp, j) => (
+                  <span key={j} style={spanStyle(sp)}>
+                    {sp.text}
+                  </span>
+                ))}
+                {'\n'}
+              </Fragment>
+            ))}
+          </pre>
+        </div>
+        {fresh && (
+          <button
+            type="button"
+            onClick={() => {
+              const el = box.current;
+              if (el) el.scrollTop = el.scrollHeight;
+              pinned.current = true;
+              setFresh(false);
+            }}
+            className="absolute inset-x-0 bottom-2 mx-auto flex w-max items-center gap-1.5 rounded-chip bg-elevated px-3 py-1.5 text-caption font-medium text-fg shadow-elevated"
+          >
+            <Down />
+            New output
+          </button>
+        )}
       </div>
 
-      <div className="border-t border-border/60 bg-bg pb-[env(safe-area-inset-bottom)]">
-        <div className="flex gap-1.5 overflow-x-auto px-3 pt-2" style={{ scrollbarWidth: 'none' }}>
-          {KEYS.map(([name, label]) => (
+      {explain && (
+        <div className={`transition-opacity duration-150 ${status === 'blocked' ? 'opacity-100' : 'opacity-0'}`}>
+          <Blocked explain={explain} onKeys={keys} />
+        </div>
+      )}
+
+      <div className="flex shrink-0 flex-col gap-2.5 rounded-t-drawer bg-elevated pt-3 pb-[max(env(safe-area-inset-bottom),12px)] shadow-[0_-8px_24px_rgb(0_0_0/0.25)]">
+        <div className="hscroll flex gap-2 px-4">
+          {(agent ? AGENT_KEYS : SHELL_KEYS).map(([name, label]) => (
             <button
               key={name}
               type="button"
               aria-label={name}
-              onClick={() => void post(paneKey, 'input', { keys: [name] } satisfies InputBody)}
-              className="h-11 shrink-0 rounded-full bg-surface px-3.5 font-mono text-[13px] text-fg/80 active:bg-border"
+              onClick={() => keys([name])}
+              className={`flex h-9 shrink-0 items-center justify-center rounded-chip border border-border bg-bg px-3 font-mono text-caption active:bg-surface ${
+                name === 'ctrl+c' ? 'text-danger' : 'text-fg'
+              }`}
             >
               {label}
             </button>
           ))}
         </div>
-        <div className="flex items-end gap-2 px-3 py-2">
-          <textarea
-            ref={input}
-            rows={1}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                send();
-              }
-            }}
-            enterKeyHint="send"
-            aria-label="Message"
-            placeholder="Reply…"
-            className="max-h-24 min-h-11 flex-1 resize-none rounded-2xl bg-surface px-3 py-2.5 text-[15px] leading-5 placeholder:text-muted"
-          />
-          <button
-            type="button"
-            onClick={send}
-            disabled={!text.trim()}
-            aria-label="Send"
-            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-bg disabled:opacity-35"
-          >
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0-6 6m6-6 6 6" />
-            </svg>
-          </button>
-        </div>
+
+        {agent && (
+          <div className="flex flex-col gap-1.5 px-4">
+            <div aria-hidden className="flex items-center gap-1.5 text-caption text-muted">
+              <span className="text-accent">✻</span> {agent}
+            </div>
+            <div className="flex items-end gap-2 rounded-composer border border-border bg-bg py-1 pr-1.5 pl-3.5">
+              <textarea
+                ref={input}
+                rows={1}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    send();
+                  }
+                }}
+                enterKeyHint="send"
+                aria-label={`Reply to ${agent}`}
+                placeholder={`Reply to ${agent[0]!.toUpperCase()}${agent.slice(1)}…`}
+                className="max-h-24 min-h-9 flex-1 resize-none self-center bg-transparent py-2 text-body leading-5 placeholder:text-muted focus:outline-none"
+              />
+              {text.trim() ? (
+                <button
+                  type="button"
+                  onClick={send}
+                  aria-label="Send"
+                  className="flex size-9 shrink-0 items-center justify-center rounded-chip bg-accent text-bg"
+                >
+                  <Send />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={dictate}
+                  aria-label="Dictate"
+                  aria-pressed={listening}
+                  className={`flex size-9 shrink-0 items-center justify-center ${listening ? 'text-accent' : 'text-muted'}`}
+                >
+                  <Mic />
+                </button>
+              )}
+              <button
+                type="button"
+                aria-label="Attach"
+                className="flex size-9 shrink-0 items-center justify-center text-muted"
+              >
+                <Attach />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      <SwitchDrawer open={showSwitch} onClose={() => setShowSwitch(false)} state={state} currentKey={paneKey} onPick={haptic} />
+      <MenuSheet
+        open={showMore}
+        title={pane?.title ?? 'Pane'}
+        onClose={() => setShowMore(false)}
+        items={[
+          { label: wrap ? 'Wrap: on' : 'Wrap: off', onClick: () => setWrap(!wrap) },
+          { label: 'Rename', onClick: () => setRename(true) },
+          { label: 'Close Pane', danger: true, onClick: () => setConfirmClose(true) },
+          { label: 'Resize to phone', hint: 'v2', disabled: true },
+        ]}
+      />
+      <NewTabSheet
+        open={showNewTab}
+        onClose={() => setShowNewTab(false)}
+        cwd={ws?.cwd}
+        where={
+          <>
+            in <span className="text-fg">{ws?.label}</span> · {host?.label}
+          </>
+        }
+        onSubmit={noop}
+      />
+      <RenameSheet open={rename} kind="Pane" current={pane?.title ?? ''} onClose={() => setRename(false)} onSubmit={noop} />
+      <ConfirmCloseSheet open={confirmClose} title={pane?.title ?? ''} onClose={() => setConfirmClose(false)} onConfirm={noop} />
     </div>
   );
 }
+
+// ponytail: rename, close and tab creation reach herdr in phase 7; the live Mux is
+// read-only today, so these drawers close and change nothing.
+const noop = () => {};

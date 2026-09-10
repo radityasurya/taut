@@ -7,7 +7,10 @@ import type { Hub } from './mux.ts';
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 
-export function startHttp(hub: Hub, opts: { port: number; hostname: string; staticDir: string }): ReturnType<typeof Bun.serve> {
+export function startHttp(hub: Hub, opts: {
+  port: number; hostname: string; staticDir: string;
+  discover?: typeof discoverLocalMuxes;
+}): ReturnType<typeof Bun.serve> {
   const root = resolve(opts.staticDir);
   return Bun.serve({
     port: opts.port, hostname: opts.hostname,
@@ -29,9 +32,10 @@ export function startHttp(hub: Hub, opts: { port: number; hostname: string; stat
           let id: string;
           try { id = decodeURIComponent(hostRetry[1]!); } catch { return json({ error: 'bad host id' }, 400); }
           if (id !== hostId) return json({ error: 'host not found' }, 404);
-          for (const item of await discoverLocalMuxes()) if (!hub.hasMux(id, item.id)) hub.add(id, new HerdrMux(item.id, item.socketPath));
+          for (const item of await (opts.discover ?? discoverLocalMuxes)()) if (!hub.hasMux(id, item.id)) hub.add(id, new HerdrMux(item.id, item.socketPath));
           await hub.refreshHost(id);
-          return json({ ok: true });
+          const host = (await hub.state()).hosts.find(host => host.id === id);
+          return host ? json(host) : json({ error: 'host not found' }, 404);
         }
         if (req.method === 'GET' && url.pathname === '/api/events') {
           const paneKey = url.searchParams.get('pane') ?? undefined;

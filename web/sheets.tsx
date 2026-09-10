@@ -8,20 +8,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog.tsx';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer.tsx';
+import { Drawer, DrawerContent, DrawerTitle } from '@/components/ui/drawer.tsx';
 
-// One input look and one primary button look for every sheet.
+// One inset-control look and one primary button look for every sheet. The drawer surface
+// is `--elevated`, so a field inset into it reads as `--bg`.
 export const field =
-  'min-h-11 w-full rounded-composer border border-border bg-surface px-3.5 text-body text-fg placeholder:text-muted';
+  'min-h-11 w-full rounded-composer border border-border bg-bg px-3.5 text-body text-fg placeholder:text-muted';
 export const primary =
-  'min-h-12 w-full rounded-chip bg-accent text-body font-semibold text-bg active:opacity-90';
+  'flex h-12 w-full items-center justify-center rounded-composer bg-accent text-body font-semibold text-bg active:opacity-90';
 
-export function Field({ label, hint, ...input }: { label: string; hint?: string } & InputHTMLAttributes<HTMLInputElement>) {
+export function Field({
+  label,
+  hint,
+  className,
+  ...input
+}: { label: string; hint?: string } & InputHTMLAttributes<HTMLInputElement>) {
   return (
-    <label className="block px-4 py-2">
-      <span className="label-caps block pb-1.5">{label}</span>
-      <input {...input} className={field} />
-      {hint && <span className="mt-1 block text-caption text-muted">{hint}</span>}
+    <label className="flex flex-col gap-1.5">
+      <span className="text-caption text-muted">{label}</span>
+      <input {...input} className={className ?? field} />
+      {hint && <span className="text-caption text-muted">{hint}</span>}
     </label>
   );
 }
@@ -29,12 +35,12 @@ export function Field({ label, hint, ...input }: { label: string; hint?: string 
 /** Reads the trimmed value of a named field, or undefined when it is empty. */
 const values = (form: HTMLFormElement) => {
   const data = new FormData(form);
-  return (name: string) => (String(data.get(name) ?? '').trim() || undefined);
+  return (name: string) => String(data.get(name) ?? '').trim() || undefined;
 };
 
 /**
  * Bottom sheet: the shadcn Drawer (vaul). Swipe to dismiss, scroll lock, focus trap and
- * Escape all come from vaul; taut only supplies the surface and the title.
+ * Escape all come from vaul; taut only supplies the surface, the title and the meta line.
  * ponytail: `repositionInputs` is off because the viewport meta already asks the browser
  * for `interactive-widget=resizes-content`, which moves the drawer for us. Turn it back
  * on if a browser without that support ever hides a focused field behind the keyboard.
@@ -42,11 +48,13 @@ const values = (form: HTMLFormElement) => {
 export function Sheet({
   open,
   title,
+  meta,
   onClose,
   children,
 }: {
   open: boolean;
   title: string;
+  meta?: ReactNode;
   onClose: () => void;
   children: ReactNode;
 }) {
@@ -54,12 +62,51 @@ export function Sheet({
     <Drawer open={open} onOpenChange={(next) => !next && onClose()} repositionInputs={false}>
       {/* No description: every sheet is a titled form. Telling Radix so keeps it quiet. */}
       <DrawerContent aria-describedby={undefined}>
-        <DrawerHeader>
-          <DrawerTitle>{title}</DrawerTitle>
-        </DrawerHeader>
-        <div className="overflow-y-auto overscroll-contain pb-2">{children}</div>
+        <div className="flex items-center justify-between px-4 pt-1 pb-3.5">
+          <DrawerTitle className="text-title tracking-tight">{title}</DrawerTitle>
+          {meta && <span className="text-caption text-muted">{meta}</span>}
+        </div>
+        <div className="overflow-y-auto overscroll-contain px-4 pb-1">{children}</div>
       </DrawerContent>
     </Drawer>
+  );
+}
+
+/** A list of actions, from the ⋯ button and from a long-press. */
+export function MenuSheet({
+  open,
+  title,
+  onClose,
+  items,
+}: {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  items: { label: string; onClick?: () => void; hint?: string; danger?: boolean; disabled?: boolean }[];
+}) {
+  return (
+    <Sheet open={open} title={title} onClose={onClose}>
+      <ul className="pb-2">
+        {items.map((it) => (
+          <li key={it.label}>
+            <button
+              type="button"
+              disabled={it.disabled}
+              onClick={() => {
+                it.onClick?.();
+                onClose();
+              }}
+              className={`flex min-h-12 w-full items-center gap-3 rounded-chip px-1 text-left text-body active:bg-surface disabled:opacity-40 ${
+                it.danger ? 'text-danger' : 'text-fg'
+              }`}
+            >
+              <span className="flex-1">{it.label}</span>
+              {it.hint && <span className="font-mono text-caption text-muted">{it.hint}</span>}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Sheet>
   );
 }
 
@@ -69,15 +116,14 @@ export function Sheet({
  */
 function AgentChips({ agents }: { agents: string[] }) {
   return (
-    <fieldset className="px-4 py-2">
-      <legend className="label-caps pb-1.5">Start</legend>
+    <fieldset className="flex flex-col gap-2">
+      <legend className="pb-2 text-caption text-muted">Start</legend>
       <div className="flex flex-wrap gap-2">
         {[...agents, ''].map((a, i) => (
           <label key={a || 'shell'} className="block">
             <input type="radio" name="agent" value={a} defaultChecked={i === 0} className="peer sr-only" />
-            <span
-              className="flex min-h-10 items-center rounded-chip border border-border bg-surface px-3.5 text-[13px] text-fg peer-checked:border-accent peer-checked:bg-accent peer-checked:font-semibold peer-checked:text-bg peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
-            >
+            <span className="flex items-center gap-1.5 rounded-chip border border-border bg-bg px-3.5 py-2 text-[13px] text-fg peer-checked:border-accent peer-checked:bg-accent peer-checked:font-semibold peer-checked:text-bg peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent">
+              {i === 0 && <span aria-hidden>✻</span>}
               {a || 'shell only'}
             </span>
           </label>
@@ -91,16 +137,21 @@ export function NewTabSheet({
   open,
   onClose,
   onSubmit,
-  agents = ['claude', 'codex'],
+  where,
+  cwd,
+  agents = ['claude', 'pi', 'codex'],
 }: {
   open: boolean;
   onClose: () => void;
   onSubmit: (o: { label?: string; cwd?: string; agent?: string }) => void;
+  where?: ReactNode;
+  cwd?: string;
   agents?: string[];
 }) {
   return (
-    <Sheet open={open} title="New Tab" onClose={onClose}>
+    <Sheet open={open} title="New Tab" meta={where} onClose={onClose}>
       <form
+        className="flex flex-col gap-3.5 pb-2"
         onSubmit={(e: FormEvent<HTMLFormElement>) => {
           e.preventDefault();
           const v = values(e.currentTarget);
@@ -112,17 +163,17 @@ export function NewTabSheet({
         <Field
           label="Directory"
           name="cwd"
+          defaultValue={cwd}
           placeholder="~/projects/taut"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
+          className={`${field} font-mono text-[13px]`}
         />
         <AgentChips agents={agents} />
-        <div className="px-4 pt-3">
-          <button type="submit" className={primary}>
-            Create tab
-          </button>
-        </div>
+        <button type="submit" className={`${primary} mt-1`}>
+          Create tab
+        </button>
       </form>
     </Sheet>
   );
@@ -140,6 +191,7 @@ export function NewWorkspaceSheet({
   return (
     <Sheet open={open} title="New Workspace" onClose={onClose}>
       <form
+        className="flex flex-col gap-3.5 pb-2"
         onSubmit={(e: FormEvent<HTMLFormElement>) => {
           e.preventDefault();
           const v = values(e.currentTarget);
@@ -155,6 +207,7 @@ export function NewWorkspaceSheet({
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
+          className={`${field} font-mono text-[13px]`}
         />
         <Field label="Label" name="label" placeholder="Optional" />
         <Field
@@ -166,11 +219,9 @@ export function NewWorkspaceSheet({
           autoCorrect="off"
           spellCheck={false}
         />
-        <div className="px-4 pt-3">
-          <button type="submit" className={primary}>
-            Create workspace
-          </button>
-        </div>
+        <button type="submit" className={`${primary} mt-1`}>
+          Create workspace
+        </button>
       </form>
     </Sheet>
   );
@@ -192,6 +243,7 @@ export function RenameSheet({
   return (
     <Sheet open={open} title={`Rename ${kind}`} onClose={onClose}>
       <form
+        className="flex flex-col gap-3.5 pb-2"
         onSubmit={(e: FormEvent<HTMLFormElement>) => {
           e.preventDefault();
           onSubmit(values(e.currentTarget)('label')!);
@@ -199,11 +251,9 @@ export function RenameSheet({
         }}
       >
         <Field label="Name" name="label" required defaultValue={current} autoCapitalize="none" autoCorrect="off" />
-        <div className="px-4 pt-3">
-          <button type="submit" className={primary}>
-            Rename
-          </button>
-        </div>
+        <button type="submit" className={`${primary} mt-1`}>
+          Rename
+        </button>
       </form>
     </Sheet>
   );

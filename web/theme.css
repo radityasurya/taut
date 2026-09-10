@@ -51,6 +51,30 @@
   font-display: swap;
 }
 
+/* shadcn's component variables, aliased onto taut's tokens. A component copied from the
+   registry then styles correctly with no second palette, and taut's tokens stay the source
+   of truth. Aliases resolve where they are used, so one block covers every theme.
+   `--border` is not listed: taut already owns that name, and `--border: var(--border)`
+   would be a cycle. */
+:root {
+  --background: var(--bg);
+  --foreground: var(--fg);
+  --card: var(--elevated);
+  --card-foreground: var(--fg);
+  --popover: var(--elevated);
+  --popover-foreground: var(--fg);
+  --primary: var(--accent);
+  --primary-foreground: var(--bg);
+  --secondary: var(--surface);
+  --secondary-foreground: var(--fg);
+  --accent-foreground: var(--bg);
+  --muted-foreground: var(--muted);
+  --destructive: var(--danger);
+  --input: var(--border);
+  --ring: var(--accent);
+  --radius: 10px;
+}
+
 /* ---- light (neutral) ---- */
 :root,
 :root[data-theme="light"] {
@@ -284,6 +308,31 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+/* Horizontal strips (key bar, chips, Tab strip) scroll without a scrollbar: the
+   right-edge content and the swipe are the affordance. */
+@utility hscroll {
+  overflow-x: auto;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Screen push. One direction, because a phone only ever goes deeper or back, and the
+   back animation reading as a push is cheaper than tracking the direction. */
+::view-transition-old(root) {
+  animation: taut-fade-out 140ms ease-in;
+}
+
+::view-transition-new(root) {
+  animation: taut-push-in 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes taut-push-in {
+  from { transform: translateX(16px); opacity: 0 }
+  to { transform: none; opacity: 1 }
 }
 
 /* Scrim and dialog fade. Radix and vaul both set `data-state`, so one utility covers

@@ -74,22 +74,48 @@ const CLAUDE_RECENT = [
   'esc to cancel · enter to confirm',
 ].join('\r\n');
 
+/** A real htop grid, 120 columns wide: the shell Pane that proves Fit and the edge fade. */
+const CYAN = '\x1b[36m';
+const YELLOW = '\x1b[33m';
+const HEAD = '\x1b[48;5;10m\x1b[38;5;0m';
+const SEL = '\x1b[48;5;12m\x1b[38;5;0m';
+const bar = (on: number, of: number) => `${GREEN}${'|'.repeat(on)}${RESET}${DIM}${' '.repeat(of - on)}${RESET}`;
+const HTOP = [
+  `  ${CYAN}0${RESET}[${bar(11, 41)}${DIM}28.1%${RESET}]   ${CYAN}4${RESET}[${bar(4, 41)}${DIM} 9.4%${RESET}]`,
+  `  ${CYAN}1${RESET}[${bar(26, 41)}${DIM}61.3%${RESET}]   ${CYAN}5${RESET}[${bar(2, 41)}${DIM} 3.9%${RESET}]`,
+  `  ${CYAN}2${RESET}[${bar(8, 41)}${DIM}18.8%${RESET}]   ${CYAN}6${RESET}[${bar(7, 41)}${DIM}16.2%${RESET}]`,
+  `  ${CYAN}3${RESET}[${bar(3, 41)}${DIM} 6.7%${RESET}]   ${CYAN}7${RESET}[${bar(1, 41)}${DIM} 1.2%${RESET}]`,
+  `  ${CYAN}Mem${RESET}[${GREEN}${'|'.repeat(17)}${CYAN}${'|'.repeat(5)}${YELLOW}${'|'.repeat(3)}${RESET}${DIM}${' '.repeat(14)}11.2G/31.3G${RESET}]   ${CYAN}Tasks: ${BOLD}212${RESET}${CYAN}, 1043 thr; ${BOLD}3${RESET}${CYAN} running${RESET}`,
+  `  ${CYAN}Swp${RESET}[${DIM}${' '.repeat(41)}0K/8.00G${RESET}]   ${CYAN}Load average: ${BOLD}1.42 1.18 0.97${RESET}`,
+  `${' '.repeat(64)}${CYAN}Uptime: ${BOLD}14 days, 03:12:41${RESET}`,
+  '',
+  `${HEAD}  PID USER       PRI  NI  VIRT   RES   SHR S  CPU% MEM%   TIME+  Command                  ${RESET}`,
+  `${SEL}48211 dev        20   0 2841M  612M 41.2M S  61.0  1.9  2:14.02 claude                   ${RESET}`,
+  '48590 dev        20   0 1412M  388M 28.0M S  18.4  1.2  0:41.55 bun server/main.ts',
+  ' 1132 dev        20   0  912M  201M 14.1M S   6.1  0.6 12:03.18 herdr server',
+  '50021 dev        20   0  734M  164M 22.9M S   3.0  0.5  0:08.40 node vite',
+  '  912 root        20   0  244M   32M 12.4M S   0.7  0.1  3:55.02 tailscaled',
+  ' 3050 dev        20   0  618M  120M 18.8M S   0.3  0.4  0:33.10 pi',
+  '  501 root        20   0   88M   14M  9.1M S   0.0  0.0  0:02.11 sshd',
+  `${DIM}F1${RESET}Help  ${DIM}F2${RESET}Setup ${DIM}F3${RESET}Search${DIM}F4${RESET}Filter${DIM}F5${RESET}Tree  ${DIM}F6${RESET}SortBy${DIM}F7${RESET}Nice -${DIM}F8${RESET}Nice +${DIM}F9${RESET}Kill  ${DIM}F10${RESET}Quit`,
+].join('\r\n');
+
 /** ms epoch `m` minutes ago, for `statusChangedAt`. */
 const ago = (m: number) => Date.now() - m * 60_000;
 
 export const mockState: State = {
   hosts: [
-    { id: 'mbp', label: 'MacBook', online: true, source: 'local' },
+    { id: 'mbp', label: 'mbp', online: true, source: 'local' },
     {
-      id: 'vps', label: 'studio', online: false, source: 'machines',
-      target: 'dev@studio.tail1234.ts.net',
-      error: 'ssh: connect to host studio port 22: No route to host',
+      id: 'vps', label: 'vps', online: false, source: 'machines',
+      target: 'dev@vps.example.ts.net',
+      error: 'ssh: connect timed out',
     },
   ],
   muxes: [
-    { key: 'mbp/herdr', hostId: 'mbp', kind: 'herdr', label: 'herdr', online: true },
-    { key: 'mbp/tmux', hostId: 'mbp', kind: 'tmux', label: 'tmux', online: true },
-    { key: 'vps/herdr', hostId: 'vps', kind: 'herdr', label: 'herdr', online: false },
+    { key: 'mbp/herdr', hostId: 'mbp', kind: 'herdr', label: 'default', online: true },
+    { key: 'mbp/tmux', hostId: 'mbp', kind: 'tmux', label: 'admin', online: true },
+    { key: 'vps/herdr', hostId: 'vps', kind: 'herdr', label: 'default', online: false },
   ],
   workspaces: [
     { key: 'mbp/herdr/taut', muxKey: 'mbp/herdr', id: 'taut', label: 'taut', cwd: '~/projects/taut' },
@@ -112,15 +138,15 @@ export const mockState: State = {
   panes: [
     {
       key: 'mbp/herdr/p1', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't1', id: 'p1',
-      title: 'claude — fix flaky ansi test', cwd: '~/projects/taut', agent: 'claude',
+      title: 'fix ansi parser', cwd: '~/projects/taut', agent: 'claude',
       status: 'blocked', revision: 412, seenRevision: 402, cols: 80, rows: 24,
-      lastLine: 'Permission required — Bash pnpm test --filter ansi', statusChangedAt: ago(4),
+      lastLine: 'Permission required — Bash pnpm test', statusChangedAt: ago(4),
     },
     {
       key: 'mbp/herdr/p2', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't2', id: 'p2',
-      title: 'codex — split the Mux registry', cwd: '~/projects/taut', agent: 'codex',
+      title: 'wire SSE events', cwd: '~/projects/taut', agent: 'claude',
       status: 'working', revision: 1180, seenRevision: 1180, cols: 80, rows: 24,
-      lastLine: 'Running tests… 12/40', statusChangedAt: ago(2),
+      lastLine: 'Reading server/mux.ts…', statusChangedAt: ago(2),
     },
     {
       key: 'mbp/herdr/p3', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't2', id: 'p3',
@@ -129,21 +155,21 @@ export const mockState: State = {
     },
     {
       key: 'mbp/herdr/p4', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't3', id: 'p4',
-      title: 'claude — write ARCHITECTURE.md', cwd: '~/projects/taut', agent: 'claude',
+      title: 'migrate hosts.json', cwd: '~/projects/taut', agent: 'pi',
       status: 'done', revision: 640, seenRevision: 611, cols: 80, rows: 24,
-      lastLine: 'Wrote docs/ARCHITECTURE.md — 214 lines', statusChangedAt: ago(12),
+      lastLine: '3 files changed, tests green', statusChangedAt: ago(12),
     },
     {
       key: 'mbp/herdr/p5', muxKey: 'mbp/herdr', workspaceId: 'digivaley', tabId: 't4', id: 'p5',
-      title: 'codex — bump deps', cwd: '~/projects/digivaley.com', agent: 'codex',
+      title: 'bump deps', cwd: '~/projects/digivaley.com', agent: 'codex',
       status: 'blocked', revision: 55, seenRevision: 55, cols: 80, rows: 24,
       lastLine: 'Waiting for approval: edit src/auth.ts', statusChangedAt: ago(23),
     },
     {
       key: 'mbp/herdr/p6', muxKey: 'mbp/herdr', workspaceId: 'digivaley', tabId: 't4', id: 'p6',
-      title: 'claude — restyle the pricing page', cwd: '~/projects/digivaley.com', agent: 'claude',
+      title: 'seo audit for listings', cwd: '~/projects/digivaley.com', agent: 'claude',
       status: 'idle', revision: 233, seenRevision: 233, cols: 80, rows: 24,
-      lastLine: 'Restyled the pricing grid to three columns', statusChangedAt: ago(95),
+      lastLine: 'Audited 42 listing pages', statusChangedAt: ago(95),
     },
     {
       key: 'mbp/herdr/p7', muxKey: 'mbp/herdr', workspaceId: 'digivaley', tabId: 't5', id: 'p7',
@@ -157,7 +183,7 @@ export const mockState: State = {
     },
     {
       key: 'mbp/tmux/p1', muxKey: 'mbp/tmux', workspaceId: 'admin', tabId: '1', id: 'p1',
-      title: 'journalctl -fu caddy', cwd: '~',
+      title: 'docker logs -f plex', cwd: '~',
       status: 'unknown', revision: 9, seenRevision: 9, cols: 120, rows: 30, statusChangedAt: ago(150),
     },
   ],
@@ -212,7 +238,9 @@ export const mockScreens: Record<string, Record<ScreenMode, Screen>> = Object.fr
     p.key,
     p.key === 'mbp/herdr/p1'
       ? pair(p.revision, CLAUDE_VISIBLE, CLAUDE_RECENT)
-      : pair(p.revision, genericScreen(p), strip(genericScreen(p))),
+      : p.key === 'mbp/tmux/p0'
+        ? pair(p.revision, HTOP, strip(HTOP))
+        : pair(p.revision, genericScreen(p), strip(genericScreen(p))),
   ]),
 );
 
@@ -363,6 +391,14 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
   }
   if (method === 'POST' && url.pathname.startsWith('/api/push/')) return json({ ok: true });
 
+  // The Hub re-dials the Host. The fixture Host stays down, which is the honest answer
+  // for a machine that is actually unreachable.
+  const host = url.pathname.match(/^\/api\/hosts\/([^/]+)\/retry$/);
+  if (method === 'POST' && host) {
+    for (const es of sources) es.push(s, { state: true });
+    return noContent();
+  }
+
   const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain)$/);
   if (!match) return undefined;
   let key: string;
@@ -390,7 +426,8 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
 
 /**
  * The `open` query param, so a screenshot can land on an open drawer:
- * `?mock&open=switch` → `'switch'`, `?mock&open=newtab` → `'newtab'`, otherwise `null`.
+ * `switch`, `more`, `newtab`, `newworkspace`, `addhost`. `?mock&theme=latte` forces a
+ * theme (read in app.tsx) and `?mock&still` stops the fixture ticking.
  * ponytail: no allow-list of names; the screens that read it already know theirs.
  */
 export function mockOpen(): string | null {
@@ -407,7 +444,7 @@ export function installMock(): void {
   const s: Store = {
     state: structuredClone(mockState),
     screens: structuredClone(mockScreens),
-    settings: { pushEnabled: false, trustedUser: '' },
+    settings: { pushEnabled: true, trustedUser: 'dev@mbp', servedBy: 'tailscale serve · 127.0.0.1:7700' },
   };
   store = s;
 
@@ -425,5 +462,7 @@ export function installMock(): void {
   window.fetch = patched as typeof window.fetch;
 
   window.EventSource = MockEventSource as unknown as typeof EventSource;
-  setInterval(() => tick(s), 2500);
+  // `?mock&still` freezes the fixture: no new output, no Status drift, so a screenshot
+  // of the same URL is the same picture twice.
+  if (!location.search.includes('still')) setInterval(() => tick(s), 2500);
 }

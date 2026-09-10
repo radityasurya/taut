@@ -9,21 +9,23 @@ in [ARCHITECTURE.md](./ARCHITECTURE.md); vocabulary in [../CONTEXT.md](../CONTEX
 Goal: walk the whole app on the phone and judge the look and the interaction model before
 anything is wired. Later phases replace mock data with real calls; the screens stay.
 
-- [ ] `web/mock.ts`: one fixture set covering every state: two Hosts, herdr and tmux Muxes,
+- [x] `web/mock.ts`: one fixture set covering every state: two Hosts, herdr and tmux Muxes,
       Panes in all five Statuses, seen and unseen, a blocked Pane with a permission prompt
       and hint keys, an offline Host, an empty Workspace
-- [ ] `?mock` in the URL (or `VITE_MOCK=1`) swaps the API layer for fixtures; SSE simulated
+- [x] `?mock` in the URL (or `VITE_MOCK=1`) swaps the API layer for fixtures; SSE simulated
       with a timer so screens "tick"
-- [ ] Home: grouped list, status dots, unseen emphasis, host chips, empty state, offline banner
-- [ ] Pane: grid view, recent view, blocked card with buttons, key bar, composer with mic,
-      attach and send, read-aloud button, swipe between Panes
-- [ ] Settings: theme picker (all six + system), hosts list and add-host sheet, push toggle,
-      "add to Home Screen" hint, trusted login field
-- [ ] Sheets: new Tab, new Workspace / worktree, rename, close confirm
-- [ ] PWA shell: manifest, icons, standalone display, safe-area insets
-- [ ] Floating bottom tab bar on Home, phone style: Panes · Hosts · Settings, with a badge
+- [x] Home: grouped list, status dots, unseen emphasis, host chips, empty state, offline banner
+- [x] Pane: top bar (back, title, status line → Switch, actions), Tab strip with + and Fit,
+      grid with Wrap, blocked card with buttons, key bar presets, composer with mic, attach and
+      send, read-aloud
+- [x] Settings: theme chips (all six + system), push toggle, haptics toggle, "add to Home
+      Screen" hint, trusted login and served-by rows. Hosts live in their own tab as cards
+- [x] Sheets: new Tab, new Workspace / worktree, rename, close confirm
+- [ ] PWA shell: manifest, icons, safe-area insets are in; standalone display is verified on a
+      device in phase 3
+- [x] Floating bottom tab bar on Home, phone style: Panes · Hosts · Settings, with a badge
       for unseen `blocked`
-- [ ] Agent-aware Pane chrome: when the Pane runs Claude Code or Pi, the composer reads as
+- [x] Agent-aware Pane chrome: when the Pane runs Claude Code or Pi, the composer reads as
       that agent's prompt box, and a chip row at the top switches between the Agents of the
       same Workspace; shell and monitor Panes (htop, logs) render as a plain grid
 
