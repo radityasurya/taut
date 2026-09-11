@@ -3,9 +3,10 @@ import { generateKeyPairSync } from 'node:crypto';
 import os from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseAnsi } from '../shared/ansi.ts';
-import type { Explain, InputBody, Mux, NewTabBody, NewTabResult, NewWorkspaceBody, NewWorkspaceResult, PushSubscriptionBody, RenameBody, Screen, ScreenEvent, ScreenMode, Settings, State, StatePane, Tree } from '../shared/types.ts';
+import type { Explain, HostConfig, InputBody, Mux, NewTabBody, NewTabResult, NewWorkspaceBody, NewWorkspaceResult, PushSubscriptionBody, RenameBody, Screen, ScreenEvent, ScreenMode, Settings, State, StateHost, StatePane, Tree } from '../shared/types.ts';
 import { sendPush, type VapidKeys } from './push.ts';
 import { configureSuggest, type SuggestAdapter } from './suggest.ts';
+import { hostId as localHostId, hostsConfigPath } from './hosts.ts';
 
 export interface HubListener {
   onState(s: State): void;
@@ -16,10 +17,12 @@ export interface HubListener {
 
 type Entry = { hostId: string; mux: Mux; tree?: Tree; refresh?: Promise<void>; again: boolean; timer?: ReturnType<typeof setTimeout>; interval?: ReturnType<typeof setInterval>; unsubscribe: () => void };
 
-interface StoredState { seen: Record<string, number>; vapid?: VapidKeys; subscriptions?: PushSubscriptionBody[]; suggestEnabled?: boolean }
+interface StoredState { seen: Record<string, number>; vapid?: VapidKeys; subscriptions?: PushSubscriptionBody[]; suggestEnabled?: boolean; trustedUser?: string }
 
 export class Hub {
   private entries = new Map<string, Entry>();
+  private hosts = new Map<string, StateHost>();
+  private closeCallbacks = new Set<() => void>();
   private listeners = new Set<HubListener>();
   private screenTimers = new Map<HubListener, ReturnType<typeof setTimeout>>();
   private cached?: State;
@@ -38,6 +41,7 @@ export class Hub {
   private vapid: VapidKeys;
   private subscriptions: PushSubscriptionBody[];
   private suggestEnabled: boolean;
+  trustedUser?: string;
   private readonly suggestAdapter: SuggestAdapter | null;
   private readonly refreshMs: number;
 
@@ -50,6 +54,7 @@ export class Hub {
     this.seen = stored.seen ?? {};
     this.subscriptions = stored.subscriptions ?? [];
     this.suggestEnabled = stored.suggestEnabled ?? false;
+    this.trustedUser = stored.trustedUser;
     this.suggestAdapter = opts.suggest === undefined ? configureSuggest() : opts.suggest;
     if (stored.vapid) this.vapid = stored.vapid;
     else {
@@ -67,10 +72,23 @@ export class Hub {
     entry.unsubscribe = mux.onChange(ids => this.changed(key, ids));
     if (this.refreshMs > 0) entry.interval = setInterval(() => void this.refresh(key).catch(() => {}), this.refreshMs);
     this.entries.set(key, entry);
+    if (!this.hosts.has(hostId)) this.setHost({ id: hostId, label: hostId, online: hostId === localHostId, source: hostId === localHostId ? 'local' : undefined });
     this.cached = undefined;
   }
 
+  setHost(host: StateHost): void { this.hosts.set(host.id, host); this.cached = undefined; this.recompute(); this.emitState(); }
+  removeHost(id: string): void {
+    for (const [key, entry] of this.entries) if (entry.hostId === id) { entry.unsubscribe(); entry.mux.close(); clearTimeout(entry.timer); clearInterval(entry.interval); this.entries.delete(key); }
+    this.hosts.delete(id); this.cached = undefined; this.recompute(); this.emitState();
+  }
+  host(id: string): StateHost | undefined { return this.hosts.get(id); }
+  onClose(callback: () => void): () => void { this.closeCallbacks.add(callback); return () => this.closeCallbacks.delete(callback); }
+
   hasMux(hostId: string, muxId: string): boolean { return this.entries.has(`${hostId}/${muxId}`); }
+  removeMux(hostId: string, muxId: string): void {
+    const key = `${hostId}/${muxId}`; const entry = this.entries.get(key); if (!entry) return;
+    entry.unsubscribe(); entry.mux.close(); clearTimeout(entry.timer); clearInterval(entry.interval); this.entries.delete(key); this.cached = undefined;
+  }
 
   async refreshHost(hostId: string): Promise<void> {
     await Promise.all([...this.entries].filter(([, entry]) => entry.hostId === hostId).map(([key]) => this.refresh(key)));
@@ -139,9 +157,9 @@ export class Hub {
   }
 
   private recompute(): State {
-    const hostIds = [...new Set([...this.entries.values()].map(e => e.hostId))];
+    const registered = [...this.hosts.values()];
     const state: State = {
-      hosts: hostIds.map(id => ({ id, label: id, online: true, source: 'local' })), muxes: [], workspaces: [], tabs: [], panes: [],
+      hosts: registered.map(host => ({ ...host, online: host.id === localHostId ? true : host.online })), muxes: [], workspaces: [], tabs: [], panes: [],
     };
     for (const [muxKey, entry] of this.entries) {
       state.muxes.push({ key: muxKey, hostId: entry.hostId, kind: entry.mux.kind, label: entry.mux.id, online: true });
@@ -274,9 +292,15 @@ export class Hub {
     this.seenTimer = setTimeout(() => this.save(), 100);
   }
   settings(): Settings {
-    return { suggest: { provider: this.suggestAdapter?.provider, model: this.suggestAdapter?.model, enabled: this.suggestEnabled } };
+    let hosts: HostConfig[] = [];
+    try { const value = JSON.parse(readFileSync(hostsConfigPath(), 'utf8')); if (Array.isArray(value)) hosts = value; } catch {}
+    return {
+      hosts, trustedUser: this.trustedUser,
+      suggest: { provider: this.suggestAdapter?.provider, model: this.suggestAdapter?.model, enabled: this.suggestEnabled },
+    };
   }
   setSuggestEnabled(value: boolean): void { this.suggestEnabled = value; this.save(); this.recompute(); this.emitState(); }
+  setTrustedUser(value: string | undefined): void { this.trustedUser = value || undefined; this.save(); }
   async forceSuggest(paneKey: string): Promise<StatePane> {
     const state = await this.state();
     const current = state.panes.find(item => item.key === paneKey);
@@ -298,7 +322,7 @@ export class Hub {
   }
   private save(): void {
     mkdirSync(dirname(this.statePath), { recursive: true });
-    writeFileSync(this.statePath, `${JSON.stringify({ seen: this.seen, vapid: this.vapid, subscriptions: this.subscriptions, suggestEnabled: this.suggestEnabled }, null, 2)}\n`);
+    writeFileSync(this.statePath, `${JSON.stringify({ seen: this.seen, vapid: this.vapid, subscriptions: this.subscriptions, suggestEnabled: this.suggestEnabled, trustedUser: this.trustedUser }, null, 2)}\n`);
   }
   vapidPublicKey(): string { return this.vapid.publicKey; }
   addSubscription(subscription: PushSubscriptionBody): void {
@@ -330,6 +354,7 @@ export class Hub {
     }, wait);
   }
   close(): void {
+    for (const callback of this.closeCallbacks) callback();
     for (const entry of this.entries.values()) { entry.unsubscribe(); entry.mux.close(); clearTimeout(entry.timer); clearInterval(entry.interval); }
     clearTimeout(this.stateTimer); clearTimeout(this.seenTimer);
     for (const timer of this.screenTimers.values()) clearTimeout(timer);

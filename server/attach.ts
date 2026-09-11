@@ -13,9 +13,37 @@ export function sanitizeName(raw: string | null): string {
   return leaf || 'file';
 }
 
-export async function writeAttachment(hostId: string, name: string, body: ReadableStream<Uint8Array>, capBytes: number): Promise<AttachResult> {
-  // ponytail: phase 5 adds an ssh target running `mkdir -p ~/.cache/taut/attachments && cat > …`.
-  if (hostId !== localHostId) throw new Error('remote hosts: phase 5');
+export function remoteAttachmentCommand(name: string): string {
+  return `mkdir -p ~/.cache/taut/attachments && cat > ~/.cache/taut/attachments/'${sanitizeName(name)}'`;
+}
+
+export function remoteAttachmentResult(target: string, name: string, bytes: number): AttachResult {
+  const display = `~/.cache/taut/attachments/${sanitizeName(name)}`;
+  const user = target.includes('@') ? target.slice(0, target.indexOf('@')) : '';
+  return { path: user ? `/home/${user}/.cache/taut/attachments/${sanitizeName(name)}` : display, bytes, display };
+}
+
+export async function writeAttachment(hostId: string, name: string, body: ReadableStream<Uint8Array>, capBytes: number, target?: string, spawn: typeof Bun.spawn = Bun.spawn): Promise<AttachResult> {
+  if (hostId !== localHostId) {
+    if (!target) throw new Error('host target not found');
+    const child = spawn(['ssh', '-o', 'BatchMode=yes', target, remoteAttachmentCommand(name)], { stdin: 'pipe', stdout: 'ignore', stderr: 'pipe' });
+    let bytes = 0;
+    try {
+      for await (const chunk of body as ReadableStream<Uint8Array> & AsyncIterable<Uint8Array>) {
+        bytes += chunk.byteLength; if (bytes > capBytes) throw new TooLarge();
+        child.stdin.write(chunk); await child.stdin.flush();
+      }
+      if (!bytes) throw new EmptyBody();
+      child.stdin.end();
+      const stderr = await new Response(child.stderr).text();
+      if (await child.exited !== 0) throw new Error(stderr.trim().split(/\r?\n/).filter(Boolean).at(-1) || 'ssh failed');
+      return remoteAttachmentResult(target, name, bytes);
+    } catch (error) {
+      child.stdin.end(); child.kill(); await child.exited.catch(() => {});
+      const cleanup = spawn(['ssh', '-o', 'BatchMode=yes', target, `rm -f ~/.cache/taut/attachments/'${sanitizeName(name)}'`], { stdout: 'ignore', stderr: 'ignore' });
+      await cleanup.exited.catch(() => {}); throw error;
+    }
+  }
   const home = os.homedir();
   const directory = join(process.env.XDG_CACHE_HOME || join(home, '.cache'), 'taut/attachments');
   await mkdir(directory, { recursive: true });

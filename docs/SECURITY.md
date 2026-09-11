@@ -108,6 +108,23 @@ nothing new.
 - **Nothing comes back.** The Hub never serves an attachment, lists the directory, or
   deletes a finished file. Clean the directory yourself when you want the space back.
 
+## Remote Hosts and trusted login
+
+When `trustedUser` is configured, the Hub requires every request—including static files and
+event streams—to carry the same `Tailscale-User-Login` value. Setting a non-empty value is
+accepted only when that very request already carries the proposed value, preventing an
+accidental lock-out. Clearing it with `null` disables the check; when it is unset the header
+never blocks access.
+
+The Hub relies on the operating-system user's SSH keys, agent, and SSH configuration. All
+discovery and transfer connections use `BatchMode=yes`, so taut never opens a password
+prompt. Host probing runs SSH against a user-provided target, but the target is validated as
+a single non-empty argv element with no whitespace and no leading dash.
+
+Attachments sent to a remote Host are streamed over SSH and stored below
+`~/.cache/taut/attachments`. Failed, empty, aborted, and over-limit transfers trigger a remote
+cleanup attempt.
+
 ## Hardening checklist
 
 1. Run the Hub on the machine you already trust with SSH access to the others.

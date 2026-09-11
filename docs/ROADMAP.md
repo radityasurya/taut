@@ -141,9 +141,38 @@ Verified 2026-09-12: a throwaway Hub on 7716 with `TAUT_SUGGEST=zai` answered
 
 ## Phase 5 — remote Hosts
 
-- [ ] `server/hosts.ts`: `hosts.json` + `herdr machine list --json` merge
-- [ ] `ssh -L` unix-socket forwarders with reconnect; ControlMaster for tmux commands
-- [ ] Settings screen: hosts, theme, push, trusted user
+`[~]` = built, awaiting the verification step on a real remote Host.
+
+- [~] `server/hosts.ts`: `hosts.json` + `herdr machine list --json` merge — `GET /api/state`
+      now carries offline Hosts too (`online: false`, `error` = the last ssh stderr line),
+      ordered local → machines → config, and `source` says which list a Host came from, which
+      is what decides Edit and Remove on the Hosts screen — `test/hosts.test.ts` covers the
+      merge, the socket-path guard, `runtimeDir()` and the probe, retry, settings and login
+      routes
+- [~] `ssh -L` unix-socket forwarders with reconnect; ControlMaster for tmux commands —
+      `POST /api/hosts/:id/retry` re-dials any Host, not only a local one, and answers with
+      the updated `StateHost`; the SSE `state` event repaints the card. `test/hosts.test.ts`
+      covers the forwarder argv, the reconnect backoff and the remote attach command; the ssh
+      forwarder is verified by that argv test only, because `ssh localhost` on this box fails
+      at publickey auth — the live reconnect check is manual, in
+      [UI.md](./UI.md#manual-check-forward-a-throwaway-herdr-over-ssh)
+- [~] Settings screen: hosts, theme, push, trusted user — `web/hosts.tsx` owns the Host cards
+      and the Add Host sheet (Label, SSH target, herdr Mux, **Probe**, Save through
+      `PUT /api/settings {hosts}`), `web/settings.tsx` owns the Access rows (Login, Trusted
+      login with Lock and Unlock through `PUT /api/settings {trustedUser}`), and `web/mock.ts`
+      answers `/api/hosts/probe`, `/api/hosts/:id/retry` and `GET`/`PUT /api/settings` from
+      fixtures. Driven in an emulated iPhone 13 against `?mock`: an empty target showed
+      `Enter a target like user@host`, a refused target showed the ssh error, a reachable one
+      listed its Muxes, Save wrote the entry with the id taken from the target host
+      (`dev@ok-box…` → `ok-box`), Edit came back prefilled and kept the id, Remove took the
+      entry out, Retry disabled itself while the call was out, and Unlock then
+      **Lock to this login** returned `trustedUser` to the login the Hub saw. Then against a
+      real throwaway Hub on 7716 with a throwaway herdr and one unreachable `hosts.json`
+      entry: the local card listed its real `herdr default · 3 panes`, the config card showed
+      the Hub's own ssh line (`Host key verification failed.`), Retry answered 200 with the
+      `StateHost`, Probe printed the same ssh line, and Settings with no Tailscale header read
+      `no identity header · not behind tailscale serve` with **Lock to this login** disabled.
+      No horizontal scroll at 390 px on any screen, mock or real
 
 Verify: kill a forwarder; it reconnects. Remote Panes show a Host chip.
 

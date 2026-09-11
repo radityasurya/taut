@@ -13,7 +13,8 @@ in [design/](./design/).
   `http://127.0.0.1:5173/`.
 
 Screenshot helpers, all under `?mock`: `&still` freezes the ticker, `&theme=`
-forces a theme, `&open=switch|more|newtab|newworkspace|addhost` opens a sheet.
+forces a theme, `&open=switch|more|newtab|newworkspace|add-host` opens a
+sheet.
 
 ## Tokens
 
@@ -196,19 +197,79 @@ camera's **Formats** setting (High Efficiency or Most Compatible) was not tried.
 
 ## Hosts (`#/hosts`) — `web/hosts.tsx`
 
-One card per Host: online Dot, label, SSH target (or `this machine`), Pane
-count, and a line per Mux with its kind, label and Pane count. An offline Host
-shows the error and a **Retry now** button that POSTs
-`/api/hosts/:id/retry`; the SSE `state` event is the receipt. The last card is
-a dashed **Add Host** button that opens the Add Host sheet.
+One card per Host, in the order `GET /api/state` sends them: this machine, then
+the discovered Hosts, then the ones in `hosts.json`. Each card is an online Dot,
+the label, the SSH target in mono (or `this machine`), the Pane count, and a
+line per Mux with its kind, label and Pane count. An offline Host replaces the
+Mux lines with its error — the Hub's last ssh stderr line, `unreachable` when
+there is none — and never shows a Pane count, because it has none to show. The
+last card is a dashed **Add Host** button.
+
+The actions under a card follow `StateHost.source`, so the screen never offers
+a write that the Hub would refuse:
+
+| The Host | Actions | Caption |
+|---|---|---|
+| `local` | none | — |
+| `machines`, from `herdr machine list` | **Retry now** while it is down | `from herdr machine list` |
+| `config`, from `hosts.json` | **Retry now** while it is down, **Edit**, **Remove** | — |
+
+**Retry now** POSTs `/api/hosts/:id/retry`, reads `Retrying…` and is disabled
+until the Hub answers; the SSE `state` event repaints the card. **Remove** PUTs
+`/api/settings` with the same `hosts` array minus that entry, and has no confirm
+dialog: it deletes one line of configuration, not a running Pane, and **Add
+Host** puts it back. A failed write prints one `--danger` line under the list.
+
+### Add Host sheet
+
+**Add Host** and **Edit** open the same drawer; Edit arrives prefilled and keeps
+the entry's `id`, so a renamed Host keeps its Panes' keys.
+
+| Field | Notes |
+|---|---|
+| Label | Optional. With none, the `id` is the first part of the target's host, so `dev@vps.example.ts.net` becomes `vps` |
+| SSH target | Required, mono, `user@host` |
+| herdr Mux | Optional, mono. The herdr session name; empty discovers every running one |
+
+**Probe** POSTs `/api/hosts/probe {target, session?}`, which dials once and
+saves nothing. The answer is one line under the button: a green Dot and
+`reachable`, with `· herdr: default, work` when the Hub named the Muxes it
+found; a red Dot and the ssh error when it was refused; and
+`Enter a target like user@host` for the 400 the Hub sends on a target it cannot
+parse. Probing is never required — **Add Host** saves a Host whose machine is
+still off, which is the point of the offline card.
+
+Save PUTs `/api/settings` with the whole `hosts` array, new entry appended or
+the same `id` replaced. The sheet closes when the Hub answers and keeps
+everything typed when it does not, the same contract every write sheet follows.
+
+### Manual check: forward a throwaway herdr over ssh
+
+No remote machine needed — the Hub forwards a local socket over `ssh localhost`.
+The check is manual: it needs key auth to yourself, which this dev box does not
+have (`Permission denied (publickey)`), so no test can run it.
+
+1. Prerequisite: `ssh -o BatchMode=yes -o ConnectTimeout=3 localhost true` must
+   exit 0.
+2. Start a throwaway herdr with `startThrowawayHerdr()` from `test/harness.ts`
+   and note the socket path it returns.
+3. Hosts → **Add Host**, target `localhost`. **Probe** lists that Mux only if
+   `herdr session list --json` on this machine reports it; otherwise fill in the
+   **herdr Mux** field yourself.
+4. Expect the card online, and its Panes on the Agents screen.
+5. `pkill -f 'ssh -N.*taut'`. The card goes offline, then comes back on the
+   1 s → 30 s backoff, which resets after 60 s of a stable connection.
+6. Stop the throwaway herdr.
+
+The forwarder flags and the socket paths are in
+[ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Settings (`#/settings`) — `web/settings.tsx`
 
 Theme chips (System plus six themes, each with its own `--bg` as the swatch;
 the current one scrolls itself into view), a push toggle, a Haptics toggle on
-Android only, the iOS install hint, a **Smart replies** toggle, and read-only
-Access rows for the trusted login and what serves the app. Hosts live on their
-own tab, not here.
+Android only, the iOS install hint, a **Smart replies** toggle, and the **Access**
+rows. Hosts live on their own tab, not here.
 
 **Smart replies** reads `GET /api/settings`. With a provider configured the hint
 is `provider · model` (`zai · glm-5.2`); with none it reads `not configured ·
@@ -233,6 +294,25 @@ The push toggle is the only control with a failure state, so it has five:
 
 The caption is one muted `text-caption` line, in the flow under the row. No
 toast, no dialog: turning a switch on is not worth an overlay.
+
+### Access
+
+Three rows, each a label with the Hub's own value in mono under it:
+
+| Row | Value | Action |
+|---|---|---|
+| Login | the `Tailscale-User-Login` header the Hub saw on this request, or `no identity header · not behind tailscale serve` | — |
+| Trusted login | `Settings.trustedUser`, or `anyone who can reach the Hub` | **Unlock** while it is set; **Lock to this login** while it is not |
+| Served by | `Settings.servedBy`, or the page's own host | — |
+
+Both actions are the same write, `PUT /api/settings {trustedUser}` — the login
+to lock to, or `null` to unlock — and the row is repainted from a fresh
+`GET /api/settings` afterwards, because only the Hub knows which header it saw.
+**Lock to this login** is disabled with no Login, since there would be nothing
+to lock to, and the Hub refuses any value other than the one the request itself
+carries: a 400 prints one `--danger` line saying to open taut through
+`tailscale serve` and try again. Locking the Hub to a login you cannot present
+would lock you out, so neither side allows it.
 
 ## Sheets — `web/sheets.tsx`, `web/switch.tsx`
 

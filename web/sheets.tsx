@@ -52,10 +52,13 @@ const WHY: Record<string, string> = {
   'mux not found': 'Mux is gone',
   'pane not found': 'Pane is gone',
   agent_not_ready: 'Agent did not start',
+  target: 'Enter a target like user@host',
+  hosts: 'Check the SSH target',
+  login: 'That login is not the one this request carries',
 };
 const why = (code: string) => WHY[code] ?? `That did not work · ${code}`;
 
-function ErrorLine({ error, busy, onRetry }: { error: string; busy: boolean; onRetry: () => void }) {
+export function ErrorLine({ error, busy, onRetry }: { error: string; busy: boolean; onRetry: () => void }) {
   return (
     <p role="alert" className="-my-1 flex items-center gap-2 text-[13px] text-danger">
       <span className="min-w-0 flex-1">{why(error)}</span>
@@ -77,7 +80,7 @@ function ErrorLine({ error, busy, onRetry }: { error: string; busy: boolean; onR
  */
 type Submit<T> = (value: T) => void | Promise<void>;
 
-function useWrite<T>(open: boolean, run: Submit<T>, onClose: () => void) {
+export function useWrite<T>(open: boolean, run: Submit<T>, onClose: () => void) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const last = useRef<{ value: T } | null>(null);

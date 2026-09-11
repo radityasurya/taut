@@ -2,8 +2,8 @@
 // Nothing imports this in production: `installMock()` is a no-op unless the page is
 // opened with `?mock` (or built with VITE_MOCK=1).
 import type {
-  Explain, InputBody, NewTabBody, NewWorkspaceBody, RenameBody, Screen, ScreenEvent, ScreenMode, SeenBody, Settings,
-  State, StatePane, Status, SuggestSettingBody,
+  Explain, InputBody, NewTabBody, NewWorkspaceBody, ProbeBody, ProbeResult, RenameBody, Screen, ScreenEvent,
+  ScreenMode, SeenBody, Settings, SettingsBody, State, StatePane, Status, SuggestSettingBody,
 } from '../shared/types.ts';
 
 // ---- fixtures ----
@@ -110,16 +110,21 @@ const ago = (m: number) => Date.now() - m * 60_000;
 export const mockState: State = {
   hosts: [
     { id: 'mbp', label: 'mbp', online: true, source: 'local' },
+    // Added from the Hosts screen, and down: the card that has to show an error, Retry,
+    // Edit and Remove all at once.
     {
-      id: 'vps', label: 'vps', online: false, source: 'machines',
+      id: 'vps', label: 'vps', online: false, source: 'config',
       target: 'dev@vps.example.ts.net',
-      error: 'ssh: connect timed out',
+      error: 'ssh: connect to host vps.example.ts.net port 22: Connection timed out',
     },
+    // Discovered, so taut may not edit it: the card that carries the machine-list caption.
+    { id: 'unraid', label: 'unraid', online: true, source: 'machines', target: 'root@unraid' },
   ],
   muxes: [
     { key: 'mbp/herdr', hostId: 'mbp', kind: 'herdr', label: 'default', online: true },
     { key: 'mbp/tmux', hostId: 'mbp', kind: 'tmux', label: 'admin', online: true },
     { key: 'vps/herdr', hostId: 'vps', kind: 'herdr', label: 'default', online: false },
+    { key: 'unraid/tmux', hostId: 'unraid', kind: 'tmux', label: 'main', online: true },
   ],
   workspaces: [
     { key: 'mbp/herdr/taut', muxKey: 'mbp/herdr', id: 'taut', label: 'taut', cwd: '~/projects/taut' },
@@ -128,6 +133,7 @@ export const mockState: State = {
     { key: 'mbp/herdr/dotfiles', muxKey: 'mbp/herdr', id: 'dotfiles', label: 'dotfiles', cwd: '~/.local/share/chezmoi' },
     { key: 'mbp/tmux/admin', muxKey: 'mbp/tmux', id: 'admin', label: 'admin', cwd: '~' },
     { key: 'vps/herdr/blog', muxKey: 'vps/herdr', id: 'blog', label: 'blog', cwd: '~/srv/blog' },
+    { key: 'unraid/tmux/main', muxKey: 'unraid/tmux', id: 'main', label: 'main', cwd: '/mnt/user' },
   ],
   // herdr numbers Tabs `t<n>`; tmux windows are their index. Both are the Mux's own id.
   tabs: [
@@ -138,6 +144,8 @@ export const mockState: State = {
     { key: 'mbp/herdr/t5', muxKey: 'mbp/herdr', workspaceId: 'digivaley', id: 't5', label: 'shell' },
     { key: 'mbp/tmux/0', muxKey: 'mbp/tmux', workspaceId: 'admin', id: '0', label: 'htop' },
     { key: 'mbp/tmux/1', muxKey: 'mbp/tmux', workspaceId: 'admin', id: '1', label: 'logs' },
+    { key: 'unraid/tmux/0', muxKey: 'unraid/tmux', workspaceId: 'main', id: '0', label: 'shell' },
+    { key: 'unraid/tmux/1', muxKey: 'unraid/tmux', workspaceId: 'main', id: '1', label: 'rsync' },
   ],
   panes: [
     {
@@ -190,6 +198,21 @@ export const mockState: State = {
       key: 'mbp/tmux/p1', muxKey: 'mbp/tmux', workspaceId: 'admin', tabId: '1', id: 'p1',
       title: 'docker logs -f plex', cwd: '~',
       status: 'unknown', revision: 9, seenRevision: 9, cols: 120, rows: 30, statusChangedAt: ago(150),
+    },
+    {
+      key: 'unraid/tmux/p0', muxKey: 'unraid/tmux', workspaceId: 'main', tabId: '0', id: 'p0',
+      title: 'bash', cwd: '/mnt/user',
+      status: 'unknown', revision: 6, seenRevision: 6, cols: 100, rows: 28, statusChangedAt: ago(320),
+    },
+    {
+      key: 'unraid/tmux/p1', muxKey: 'unraid/tmux', workspaceId: 'main', tabId: '1', id: 'p1',
+      title: 'rsync -a media/', cwd: '/mnt/user',
+      status: 'unknown', revision: 44, seenRevision: 44, cols: 100, rows: 28, statusChangedAt: ago(61),
+    },
+    {
+      key: 'unraid/tmux/p2', muxKey: 'unraid/tmux', workspaceId: 'main', tabId: '1', id: 'p2',
+      title: 'btrfs scrub status', cwd: '/mnt/user',
+      status: 'unknown', revision: 2, seenRevision: 2, cols: 100, rows: 28, statusChangedAt: ago(400),
     },
   ],
 };
@@ -542,7 +565,18 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
   if (method === 'GET' && url.pathname === '/api/state') return json(s.state);
   if (url.pathname === '/api/settings') {
     if (method === 'GET') return json(s.settings);
-    if (method === 'PUT') { Object.assign(s.settings, body as object); return json(s.settings); }
+    if (method === 'PUT') {
+      const patch = (body ?? {}) as SettingsBody;
+      if (patch.hosts) s.settings.hosts = patch.hosts;
+      if ('trustedUser' in patch) {
+        // The Hub only locks to the login it saw on this very request, so a phone cannot
+        // lock a Hub to somebody else's identity. `null` unlocks and needs no header.
+        if (patch.trustedUser === null) delete s.settings.trustedUser;
+        else if (patch.trustedUser !== s.settings.login) return json({ error: 'login' }, 400);
+        else s.settings.trustedUser = patch.trustedUser;
+      }
+      return json(s.settings);
+    }
   }
   if (method === 'POST' && url.pathname === '/api/settings/suggest') {
     s.settings.suggest.enabled = Boolean((body as SuggestSettingBody | undefined)?.enabled);
@@ -553,12 +587,26 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
   if (method === 'GET' && url.pathname === '/api/push/vapid') return json({ publicKey: 'mock-vapid-public-key' });
   if (url.pathname === '/api/push/subscribe') return noContent();
 
-  // The Hub re-dials the Host. The fixture Host stays down, which is the honest answer
-  // for a machine that is actually unreachable.
+  // The Hub re-dials the Host and answers with the Host as it now stands. The fixture Host
+  // stays down, which is the honest answer for a machine that is actually unreachable.
   const host = url.pathname.match(/^\/api\/hosts\/([^/]+)\/retry$/);
   if (method === 'POST' && host) {
+    const found = s.state.hosts.find((h) => h.id === decodeURIComponent(host[1]!));
+    if (!found) return json({ error: 'host not found' }, 404);
     for (const es of sources) es.push(s, { state: true });
-    return noContent();
+    return json(found);
+  }
+
+  // One dial, nothing saved. A target containing `ok` answers; anything else is refused,
+  // which is the pair of answers the Add Host sheet has to render.
+  if (method === 'POST' && url.pathname === '/api/hosts/probe') {
+    const target = (body as ProbeBody | undefined)?.target?.trim();
+    if (!target) return json({ error: 'target' }, 400);
+    return json(
+      target.includes('ok')
+        ? ({ online: true, sessions: ['default', 'work'] } satisfies ProbeResult)
+        : ({ online: false, error: 'ssh: Permission denied (publickey)' } satisfies ProbeResult),
+    );
   }
 
   const wrote = write(s, url, method, body);
@@ -619,7 +667,7 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
 
 /**
  * The `open` query param, so a screenshot can land on an open drawer:
- * `switch`, `more`, `newtab`, `newworkspace`, `addhost`. `?mock&theme=latte` forces a
+ * `switch`, `more`, `newtab`, `newworkspace`, `add-host`. `?mock&theme=latte` forces a
  * theme (read in app.tsx) and `?mock&still` stops the fixture ticking.
  * ponytail: no allow-list of names; the screens that read it already know theirs.
  */
@@ -638,8 +686,11 @@ export function installMock(): void {
     state: structuredClone(mockState),
     screens: structuredClone(mockScreens),
     settings: {
-      trustedUser: 'dev@mbp',
+      // Locked to the login this request carries, so Unlock works and a re-lock is legal.
+      login: 'dev@github',
+      trustedUser: 'dev@github',
       servedBy: 'tailscale serve · 127.0.0.1:7700',
+      hosts: [{ id: 'vps', label: 'vps', target: 'dev@vps.example.ts.net' }],
       suggest: { provider: 'zai', model: 'glm-5.2', enabled: true },
     },
   };

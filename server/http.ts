@@ -1,7 +1,7 @@
 import { isAbsolute, resolve, sep } from 'node:path';
-import type { InputBody, NewTabBody, NewWorkspaceBody, PushSubscriptionBody, RenameBody, ScreenMode, SeenBody, SuggestSettingBody } from '../shared/types.ts';
+import type { HostConfig, InputBody, NewTabBody, NewWorkspaceBody, ProbeBody, PushSubscriptionBody, RenameBody, ScreenMode, SeenBody, SettingsBody, SuggestSettingBody } from '../shared/types.ts';
 import { HerdrMux } from './herdr.ts';
-import { discoverLocalMuxes, hostId } from './hosts.ts';
+import { discoverLocalMuxes, discoverRemote, hostId, startRemoteHost, syncHosts, validTarget, validateHosts, writeHostsConfig } from './hosts.ts';
 import type { Hub } from './mux.ts';
 import { EmptyBody, sanitizeName, TooLarge, writeAttachment } from './attach.ts';
 
@@ -15,21 +15,24 @@ const nonEmpty = (value: unknown) => typeof value === 'string' && value.trim().l
 export function startHttp(hub: Hub, opts: {
   port: number; hostname: string; staticDir: string;
   discover?: typeof discoverLocalMuxes;
+  discoverRemote?: (target: string, session?: string) => Promise<{ name: string; socketPath: string }[]>;
+  configPath?: string;
 }): ReturnType<typeof Bun.serve> {
   const root = resolve(opts.staticDir);
+  const retries = new Set<string>(); let probes = 0;
   return Bun.serve({
     port: opts.port, hostname: opts.hostname,
     // SSE streams idle between pings; adapter has its own 10 s RPC timeout
     idleTimeout: 0,
     async fetch(req) {
       const url = new URL(req.url);
+      if (hub.trustedUser && req.headers.get('tailscale-user-login') !== hub.trustedUser) return json({ error: 'login' }, 403);
       if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
         const origin = req.headers.get('origin');
         try {
           if (!origin || new URL(origin).host !== req.headers.get('host')) return json({ error: 'origin' }, 403);
         } catch { return json({ error: 'origin' }, 403); }
       }
-      // ponytail: Tailscale-User-Login check in phase 5.
       try {
         if (req.method === 'GET' && url.pathname === '/api/state') return json(await hub.state());
         const muxWrite = url.pathname.match(/^\/api\/muxes\/([^/]+)\/(tabs|workspaces)$/);
@@ -56,7 +59,22 @@ export function startHttp(hub: Hub, opts: {
           if (!nonEmpty(body.muxKey) || !validLabel(body.label, true) || targetKeys.length !== 1 || !nonEmpty(body[targetKeys[0]!])) return json({ error: 'body' }, 400);
           await hub.rename(body as unknown as RenameBody); return new Response(null, { status: 204 });
         }
-        if (req.method === 'GET' && url.pathname === '/api/settings') return json(hub.settings());
+        if (req.method === 'GET' && url.pathname === '/api/settings') return json({ ...hub.settings(), login: req.headers.get('tailscale-user-login') ?? undefined });
+        if (req.method === 'PUT' && url.pathname === '/api/settings') {
+          let body: SettingsBody;
+          try { body = await req.json(); } catch { return json({ error: 'body' }, 400); }
+          if (!plainObject(body)) return json({ error: 'body' }, 400);
+          if (body.trustedUser !== undefined && body.trustedUser !== null && typeof body.trustedUser !== 'string') return json({ error: 'login' }, 400);
+          const trusted = typeof body.trustedUser === 'string' ? body.trustedUser.trim() : body.trustedUser;
+          if (trusted && req.headers.get('tailscale-user-login') !== trusted) return json({ error: 'login' }, 400);
+          if (body.hosts !== undefined) {
+            if (validateHosts(body.hosts)) return json({ error: 'hosts' }, 400);
+            await writeHostsConfig(body.hosts as HostConfig[], opts.configPath);
+          }
+          if (body.trustedUser !== undefined) hub.setTrustedUser(trusted || undefined);
+          if (body.hosts !== undefined) void syncHosts(hub, { configPath: opts.configPath, discover: opts.discoverRemote });
+          return json(hub.settings());
+        }
         if (req.method === 'POST' && url.pathname === '/api/settings/suggest') {
           let body: SuggestSettingBody;
           try { body = await req.json(); } catch { return json({ error: 'body' }, 400); }
@@ -84,11 +102,35 @@ export function startHttp(hub: Hub, opts: {
         if (req.method === 'POST' && hostRetry) {
           let id: string;
           try { id = decodeURIComponent(hostRetry[1]!); } catch { return json({ error: 'bad host id' }, 400); }
-          if (id !== hostId) return json({ error: 'host not found' }, 404);
-          for (const item of await (opts.discover ?? discoverLocalMuxes)()) if (!hub.hasMux(id, item.id)) hub.add(id, new HerdrMux(item.id, item.socketPath));
-          await hub.refreshHost(id);
+          const known = hub.host?.(id) ?? (await hub.state()).hosts.find(host => host.id === id);
+          if (!known) return json({ error: 'host not found' }, 404);
+          if (id === hostId) {
+            for (const item of await (opts.discover ?? discoverLocalMuxes)()) if (!hub.hasMux(id, item.id)) hub.add(id, new HerdrMux(item.id, item.socketPath));
+            await hub.refreshHost(id);
+          } else if (known.target) {
+            if (retries.has(id)) return json(known);
+            retries.add(id);
+            try {
+              if (opts.discoverRemote) {
+                try { const found = await opts.discoverRemote(known.target); hub.setHost({ ...known, online: found.length > 0, error: found.length ? undefined : 'no running Muxes' }); }
+                catch (error) { hub.setHost({ ...known, online: false, error: errorMessage(error) }); }
+              } else await startRemoteHost(hub, known);
+            } finally { retries.delete(id); }
+          }
           const host = (await hub.state()).hosts.find(host => host.id === id);
           return host ? json(host) : json({ error: 'host not found' }, 404);
+        }
+        if (req.method === 'POST' && url.pathname === '/api/hosts/probe') {
+          let body: ProbeBody;
+          try { body = await req.json(); } catch { return json({ error: 'body' }, 400); }
+          if (!validTarget(body?.target) || body.session !== undefined && !nonEmpty(body.session)) return json({ error: 'target' }, 400);
+          if (probes >= 4) return json({ error: 'busy' }, 429);
+          probes++;
+          try {
+            const found = await (opts.discoverRemote ?? discoverRemote)(body.target, body.session);
+            return json({ online: true, sessions: found.map(item => item.name) });
+          } catch (error) { return json({ online: false, error: errorMessage(error).split(/\r?\n/).filter(Boolean).at(-1) }); }
+          finally { probes--; }
         }
         if (req.method === 'GET' && url.pathname === '/api/events') {
           const paneKey = url.searchParams.get('pane') ?? undefined;
@@ -131,7 +173,8 @@ export function startHttp(hub: Hub, opts: {
                 transform(chunk, controller) { received += chunk.byteLength; controller.enqueue(chunk); },
                 flush() { if (received < length) throw new Error('attachment aborted'); },
               }));
-              return json(await writeAttachment(await hub.paneHost(key), sanitizeName(req.headers.get('x-name')), body, cap));
+              const paneHost = await hub.paneHost(key);
+              return json(await writeAttachment(paneHost, sanitizeName(req.headers.get('x-name')), body, cap, hub.host(paneHost)?.target));
             } catch (error) {
               if (error instanceof TooLarge) return json({ error: 'too large' }, 413);
               if (error instanceof EmptyBody) return json({ error: 'body' }, 400);

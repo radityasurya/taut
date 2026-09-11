@@ -270,18 +270,20 @@ export function post(paneKey: string, path: 'input' | 'seen' | 'suggest', body: 
 }
 
 /**
- * POST JSON and say what went wrong. Rejects with the Hub's own `{error}` code, or
+ * Send JSON and say what went wrong. Rejects with the Hub's own `{error}` code, or
  * `http <status>`, or `network` when the fetch never landed; resolves with the parsed
  * body (201) or undefined (204). The caller turns the code into a sentence.
+ * ponytail: `method` only because `/api/settings` is a PUT and a GET; no second helper.
  */
-export async function api<T>(path: string, body?: unknown): Promise<T> {
+export async function api<T>(path: string, body?: unknown, method: 'GET' | 'POST' | 'PUT' = 'POST'): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(path, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body ?? {}),
-    });
+    response = await fetch(
+      path,
+      method === 'GET'
+        ? {}
+        : { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) },
+    );
   } catch {
     throw new Error('network');
   }

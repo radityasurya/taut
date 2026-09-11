@@ -1,9 +1,10 @@
 import { TopBar } from './header.tsx';
 import { useEffect, useState } from 'react';
-import { getTheme, setTheme, THEMES } from './app.tsx';
+import { api, getTheme, setTheme, THEMES } from './app.tsx';
 import type { Theme } from './app.tsx';
 import { InstallHint, Toggle } from './hosts.tsx';
 import { disablePush, enablePush, pushOn } from './push.ts';
+import type { ReactNode } from 'react';
 import type { Settings as HubSettings, SuggestSettingBody } from '../shared/types.ts';
 
 const LABELS: Record<Theme, string> = {
@@ -31,7 +32,8 @@ const android = /Android/.test(navigator.userAgent);
 
 export function Settings() {
   const [theme, choose] = useState(getTheme);
-  const [prefs, setPrefs] = useState<HubSettings>({ suggest: { enabled: false } });
+  const [prefs, setPrefs] = useState<HubSettings>({ hosts: [], suggest: { enabled: false } });
+  const [access, setAccess] = useState('');
   const [haptics, setHaptics] = useState(() => localStorage.getItem('taut.haptics') !== 'off');
   // Push state is the browser's, not the Hub's: the intent in localStorage plus a live
   // permission. `/api/settings` has no push field to read.
@@ -41,12 +43,21 @@ export function Settings() {
   // decides whether to show the drafts. On means both, and the switch writes both.
   const [smart, setSmart] = useState(() => localStorage.getItem('taut.smart') === 'on');
 
-  useEffect(() => {
-    fetch('/api/settings')
-      .then((r) => r.json() as Promise<HubSettings>)
-      .then(setPrefs)
-      .catch(() => {});
-  }, []);
+  const read = () => api<HubSettings>('/api/settings', undefined, 'GET').then(setPrefs).catch(() => {});
+  useEffect(() => void read(), []);
+
+  // Locking and unlocking are the same write. The row is repainted from a fresh read, not
+  // from what was sent: only the Hub knows whether the header it saw matched.
+  const lock = (trustedUser: string | null) => {
+    setAccess('');
+    api<HubSettings>('/api/settings', { trustedUser }, 'PUT').then(read, (e: unknown) =>
+      setAccess(
+        (e instanceof Error && e.message) === 'login'
+          ? 'The Hub did not see that login on this request. Open taut through tailscale serve and try again.'
+          : 'The Hub did not save that. Check the connection and try again.',
+      ),
+    );
+  };
 
   const suggest = prefs.suggest ?? { enabled: false };
   const provider = suggest.provider && [suggest.provider, suggest.model].filter(Boolean).join(' · ');
@@ -143,15 +154,68 @@ export function Settings() {
       )}
 
       <h2 className="label-caps px-4 pt-6 pb-1">Access</h2>
-      <div className="flex min-h-12 items-center gap-3 px-4 py-2">
-        <span className="flex-1 text-body">Trusted login</span>
-        <span className="truncate font-mono text-caption text-muted">{prefs.trustedUser || 'not set'}</span>
-      </div>
+      <Row label="Login" value={prefs.login} empty="no identity header · not behind tailscale serve" />
       <div className="ml-4 border-t border-border/60" />
-      <div className="flex min-h-12 items-center gap-3 px-4 py-2">
-        <span className="flex-1 text-body">Served by</span>
-        <span className="truncate font-mono text-caption text-muted">{prefs.servedBy || location.host}</span>
-      </div>
+      <Row
+        label="Trusted login"
+        value={prefs.trustedUser}
+        empty="anyone who can reach the Hub"
+        action={
+          prefs.trustedUser ? (
+            <button type="button" onClick={() => lock(null)} className={accessAction}>
+              Unlock
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!prefs.login}
+              onClick={() => lock(prefs.login!)}
+              className={accessAction}
+            >
+              Lock to this login
+            </button>
+          )
+        }
+      />
+      {access && (
+        <p role="alert" className="px-4 pb-2 text-caption leading-relaxed text-danger">
+          {access}
+        </p>
+      )}
+      <div className="ml-4 border-t border-border/60" />
+      <Row label="Served by" value={prefs.servedBy || location.host} />
+    </div>
+  );
+}
+
+const accessAction =
+  'flex h-9 shrink-0 items-center rounded-chip px-2 text-[13px] font-medium text-accent active:bg-surface disabled:text-muted disabled:opacity-60';
+
+/**
+ * One Access row: the label, the Hub's value in mono under it, and an optional action.
+ * The value goes on its own line because a login and a serve address both outrun the row.
+ */
+function Row({
+  label,
+  value,
+  empty,
+  action,
+}: {
+  label: string;
+  value?: string;
+  /** What the row says when the Hub has no value: the state, not the word "none". */
+  empty?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-12 items-center gap-3 px-4 py-2">
+      <span className="min-w-0 flex-1">
+        <span className="block text-body">{label}</span>
+        <span className={`mt-px block truncate text-caption text-muted ${value ? 'font-mono' : ''}`}>
+          {value || empty}
+        </span>
+      </span>
+      {action}
     </div>
   );
 }

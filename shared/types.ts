@@ -87,9 +87,27 @@ export interface PushSubscriptionBody {
   endpoint: string; expirationTime?: number | null;
   keys: { p256dh: string; auth: string };
 }
+/** One entry of $XDG_CONFIG_HOME/taut/hosts.json (default ~/.config/taut/hosts.json). */
+export interface HostConfig {
+  id: string; label?: string;
+  /** ssh target, e.g. `dev@vps.example.ts.net` */
+  target: string;
+  /** herdr session name; absent = discover all running sessions */
+  session?: string;
+  herdr?: boolean; tmux?: boolean;
+}
+/** POST /api/hosts/probe body: run discovery once, save nothing. */
+export interface ProbeBody { target: string; session?: string }
+export interface ProbeResult { online: boolean; sessions?: string[]; error?: string }
+/** PUT /api/settings body. `trustedUser: null` unlocks. Omitted keys are left unchanged. */
+export interface SettingsBody { trustedUser?: string | null; hosts?: HostConfig[] }
 /** GET /api/settings */
 export interface Settings {
-  trustedUser?: string; servedBy?: string;
+  trustedUser?: string;
+  /** the `Tailscale-User-Login` header as seen on this request; absent when not behind tailscale serve */
+  login?: string;
+  servedBy?: string;
+  hosts: HostConfig[];
   /** Smart replies: provider/model absent when the Hub has no TAUT_SUGGEST; enabled is the persisted Hub flag */
   suggest: { provider?: string; model?: string; enabled: boolean };
 }

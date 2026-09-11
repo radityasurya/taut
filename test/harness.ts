@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { HerdrMux } from '../server/herdr.ts';
 
 const herdr = Bun.which('herdr');
-export const herdrAvailable = Boolean(herdr);
+// The managed Codex sandbox blocks unix socket creation even when the binary is installed.
+export const herdrAvailable = Boolean(herdr) && process.env.CODEX_SANDBOX_NETWORK_DISABLED !== '1';
 
 export function herdrRpc(sock: string, method: string, params: Record<string, unknown> = {}): Promise<any> {
   return new Promise((resolve, reject) => {

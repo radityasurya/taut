@@ -21,6 +21,16 @@ behind the two irreversible choices live in `docs/adr/`.
   `HERDR_SOCKET_PATH`; copy `~/.local/state/herdr/agent-detection/remote` into the isolated
   state tree when contract tests need the downloaded agent manifests.
 - `HERDR_SOCKET_PATH` overrides local Mux discovery in the Hub, which is useful for tests.
+- Remote Host SSH is deliberately non-interactive (`BatchMode=yes`). Forwarders also need
+  `ExitOnForwardFailure=yes`, `StreamLocalBindUnlink=yes`, server-alive probes, and a
+  `ControlPath` below taut's private runtime directory; removing any of these changes failure
+  or stale-socket behaviour.
+- Unix socket paths must be shorter than 100 bytes. Remote forwarders use readable
+  `<host>-<mux>.sock` names when they fit and a short SHA-1-derived name otherwise.
+- herdr before 0.9 has no `machine list`; this is a supported empty discovery source, not a
+  startup error.
+- `hub.close()` owns transport shutdown too: it must terminate every SSH forwarder and remove
+  its local forwarded sockets.
 - `pane.report_agent` with a `state` gives the reporter authority: herdr's screen rules still
   classify (`agent.explain` says blocked) but `agent_status` keeps the reported state. To
   simulate a blocked Agent, report `--state blocked` explicitly after printing the prompt.

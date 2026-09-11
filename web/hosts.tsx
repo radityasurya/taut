@@ -1,14 +1,30 @@
 import { TopBar } from './header.tsx';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { State, StateHost } from '../shared/types.ts';
-import { opensWith } from './app.tsx';
+import type { HostConfig, ProbeResult, Settings, State, StateHost } from '../shared/types.ts';
+import { api, opensWith } from './app.tsx';
 import { Install, Plus } from './icons.tsx';
-import { Field, primary, Sheet } from './sheets.tsx';
+import { ErrorLine, Field, field, primary, Sheet, useWrite } from './sheets.tsx';
 
 const count = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
-function HostCard({ host, state }: { host: StateHost; state: State }) {
+/** A small text action inside a Host card: Edit, Remove. */
+const action = 'flex h-9 items-center rounded-chip px-2 text-[13px] font-medium active:bg-surface disabled:opacity-50';
+
+function HostCard({
+  host,
+  state,
+  config,
+  onEdit,
+  onRemove,
+}: {
+  host: StateHost;
+  state: State;
+  /** The `hosts.json` entry this Host came from, when it came from one. */
+  config?: HostConfig;
+  onEdit: (entry: HostConfig) => void;
+  onRemove: (entry: HostConfig) => void;
+}) {
   const [retrying, setRetrying] = useState(false);
   const muxes = state.muxes.filter((m) => m.hostId === host.id);
   const panes = state.panes.filter((p) => muxes.some((m) => m.key === p.muxKey));
@@ -16,16 +32,16 @@ function HostCard({ host, state }: { host: StateHost; state: State }) {
   const retry = () => {
     setRetrying(true);
     // The Hub re-dials the Host; the SSE `state` event is the receipt.
-    fetch(`/api/hosts/${encodeURIComponent(host.id)}/retry`, { method: 'POST' })
+    void api<StateHost>(`/api/hosts/${encodeURIComponent(host.id)}/retry`)
       .catch(() => {})
-      .finally(() => setTimeout(() => setRetrying(false), 800));
+      .finally(() => setRetrying(false));
   };
 
   return (
     <li className="flex flex-col gap-2.5 rounded-card bg-elevated px-4 py-3.5">
       <div className="flex items-center gap-2.5">
         <span aria-hidden className={`size-2 shrink-0 rounded-full ${host.online ? 'bg-ok' : 'bg-danger'}`} />
-        <span className="font-semibold">{host.label}</span>
+        <span className="shrink-0 font-semibold">{host.label}</span>
         <span className={`min-w-0 truncate text-caption text-muted ${host.target ? 'font-mono' : ''}`}>
           {host.target ?? 'this machine'}
         </span>
@@ -42,8 +58,8 @@ function HostCard({ host, state }: { host: StateHost; state: State }) {
             return (
               <li key={m.key} className="flex items-center gap-2.5 text-[13px] text-muted">
                 <span className="font-mono text-fg">{m.kind}</span>
-                {m.label !== m.kind && <span>{m.label}</span>}
-                <span className="ml-auto tabular-nums">
+                {m.label !== m.kind && <span className="min-w-0 truncate">{m.label}</span>}
+                <span className="ml-auto shrink-0 tabular-nums">
                   {count(mine.length, 'pane')}
                   {blocked > 0 && ` · ${blocked} blocked`}
                 </span>
@@ -52,9 +68,13 @@ function HostCard({ host, state }: { host: StateHost; state: State }) {
           })}
         </ul>
       ) : (
-        <>
-          <p className="text-[13px] text-danger">{host.error ?? 'unreachable'}</p>
-          <div className="flex items-center gap-2">
+        <p className="text-[13px] break-words text-danger">{host.error ?? 'unreachable'}</p>
+      )}
+
+      {/* Retry when it is down, Edit and Remove when taut owns the entry, the source otherwise. */}
+      {(!host.online || config || host.source === 'machines') && (
+        <div className="-mx-1 flex items-center gap-1">
+          {!host.online && (
             <button
               type="button"
               onClick={retry}
@@ -63,19 +83,47 @@ function HostCard({ host, state }: { host: StateHost; state: State }) {
             >
               {retrying ? 'Retrying…' : 'Retry now'}
             </button>
-            {host.source === 'machines' && (
-              <span className="ml-auto text-caption text-muted">from herdr machine list</span>
-            )}
-          </div>
-        </>
+          )}
+          {config && (
+            <>
+              <button type="button" onClick={() => onEdit(config)} className={`${action} text-muted`}>
+                Edit
+              </button>
+              <button type="button" onClick={() => onRemove(config)} className={`${action} text-danger`}>
+                Remove
+              </button>
+            </>
+          )}
+          {host.source === 'machines' && (
+            <span className="ml-auto pl-2 text-right text-caption text-muted">from herdr machine list</span>
+          )}
+        </div>
       )}
     </li>
   );
 }
 
 export function Hosts({ state }: { state: State | null }) {
-  const [add, setAdd] = useState(() => opensWith('addhost'));
+  // `hosts.json` as the Hub holds it. State says what a Host is doing; this says what taut
+  // may edit, and every write sends the whole array back.
+  const [hosts, setHosts] = useState<HostConfig[]>([]);
+  const [edit, setEdit] = useState<HostConfig | null>(null);
+  const [add, setAdd] = useState(() => opensWith('add-host') || opensWith('addhost'));
+  const [note, setNote] = useState('');
   const hub = state?.hosts.find((h) => h.source === 'local' || !h.target);
+
+  const read = () =>
+    api<Settings>('/api/settings', undefined, 'GET')
+      .then((s) => setHosts(s.hosts ?? []))
+      .catch(() => {});
+  useEffect(() => void read(), []);
+
+  const write = async (next: HostConfig[]) => {
+    const saved = await api<Settings>('/api/settings', { hosts: next }, 'PUT');
+    setHosts(saved.hosts ?? next);
+  };
+
+  const open = add || edit !== null;
 
   return (
     <div className="mx-auto max-w-2xl pt-[env(safe-area-inset-top)] pb-28">
@@ -83,7 +131,19 @@ export function Hosts({ state }: { state: State | null }) {
 
       <ul className="flex flex-col gap-3 px-4 pt-2">
         {state?.hosts.map((h) => (
-          <HostCard key={h.id} host={h} state={state} />
+          <HostCard
+            key={h.id}
+            host={h}
+            state={state}
+            config={h.source === 'config' ? (hosts.find((c) => c.id === h.id) ?? { id: h.id, target: h.target ?? '' }) : undefined}
+            onEdit={setEdit}
+            onRemove={(entry) => {
+              setNote('');
+              write(hosts.filter((c) => c.id !== entry.id)).catch((e: unknown) =>
+                setNote(e instanceof Error ? e.message : 'network'),
+              );
+            }}
+          />
         ))}
         <li>
           <button
@@ -98,58 +158,153 @@ export function Hosts({ state }: { state: State | null }) {
         </li>
       </ul>
 
-      <AddHostSheet open={add} onClose={() => setAdd(false)} onSubmit={noop} />
+      {note && (
+        <p role="alert" className="px-4 pt-2 text-[13px] text-danger">
+          Could not save the Host list · {note}
+        </p>
+      )}
+
+      <AddHostSheet
+        open={open}
+        editing={edit ?? undefined}
+        onClose={() => {
+          setAdd(false);
+          setEdit(null);
+        }}
+        onSubmit={(entry) => write([...hosts.filter((c) => c.id !== entry.id), entry])}
+      />
     </div>
   );
 }
 
+/** `Label` wins; otherwise the first part of the target's host, so `dev@vps.ts.net` is `vps`. */
+const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+const hostId = (label: string | undefined, target: string) =>
+  slug(label ?? '') || slug(target.split('@').pop()!.split(':')[0]!.split('.')[0]!) || 'host';
+
+/**
+ * Add or edit one `hosts.json` entry. Probe is optional: it dials the target once and
+ * saves nothing, so a Host can be added before its machine is up.
+ */
 export function AddHostSheet({
   open,
+  editing,
   onClose,
   onSubmit,
 }: {
   open: boolean;
+  /** The entry being changed; its `id` is kept, so the Host keeps its Panes' keys. */
+  editing?: HostConfig;
   onClose: () => void;
-  onSubmit: (o: { label: string; ssh: string; session?: string }) => void;
+  onSubmit: (entry: HostConfig) => Promise<void>;
 }) {
+  const { busy, error, submit, retry } = useWrite(open, onSubmit, onClose);
+  const form = useRef<HTMLFormElement>(null);
+  const [probing, setProbing] = useState(false);
+  const [result, setResult] = useState<(ProbeResult & { code?: string }) | null>(null);
+
+  // A reopened sheet starts clean, the same rule the write hook follows.
+  useEffect(() => {
+    if (!open) {
+      setProbing(false);
+      setResult(null);
+    }
+  }, [open]);
+
+  const read = () => {
+    const data = new FormData(form.current!);
+    const v = (name: string) => String(data.get(name) ?? '').trim() || undefined;
+    return { label: v('label'), target: v('target') ?? '', session: v('session') };
+  };
+
+  const probe = () => {
+    const { target, session } = read();
+    setProbing(true);
+    setResult(null);
+    api<ProbeResult>('/api/hosts/probe', { target, session })
+      .then(setResult)
+      .catch((e: unknown) => setResult({ online: false, code: (e instanceof Error && e.message) || 'network' }))
+      .finally(() => setProbing(false));
+  };
+
   return (
-    <Sheet open={open} title="Add Host" onClose={onClose}>
+    <Sheet open={open} title={editing ? 'Edit Host' : 'Add Host'} onClose={onClose}>
       <form
+        ref={form}
         className="flex flex-col gap-3.5 pb-2"
         onSubmit={(e: FormEvent<HTMLFormElement>) => {
           e.preventDefault();
-          const data = new FormData(e.currentTarget);
-          const v = (name: string) => String(data.get(name) ?? '').trim();
-          onSubmit({ label: v('label'), ssh: v('ssh'), session: v('session') || undefined });
-          onClose();
+          const { label, target, session } = read();
+          submit({ id: editing?.id ?? hostId(label, target), label, target, session });
         }}
       >
-        <Field label="Label" name="label" required placeholder="workstation" />
+        <Field
+          label="Label"
+          name="label"
+          defaultValue={editing?.label}
+          placeholder="Optional · taken from the target"
+          maxLength={40}
+        />
         <Field
           label="SSH target"
-          name="ssh"
+          name="target"
           required
+          defaultValue={editing?.target}
           placeholder="user@host"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
+          className={`${field} font-mono text-[13px]`}
         />
         <Field
-          label="tmux target"
+          label="herdr Mux"
           name="session"
-          placeholder="main"
-          hint="Leave empty for herdr"
+          defaultValue={editing?.session}
+          placeholder="default · leave empty to discover"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
+          className={`${field} font-mono text-[13px]`}
         />
-        <button type="submit" className={`${primary} mt-1`}>
-          Add Host
+
+        <button
+          type="button"
+          onClick={probe}
+          disabled={probing}
+          className="flex h-11 w-full items-center justify-center rounded-composer border border-border bg-bg text-body font-medium active:bg-surface disabled:opacity-60"
+        >
+          {probing ? 'Probing…' : 'Probe'}
+        </button>
+        {result && <ProbeLine result={result} />}
+
+        {error && <ErrorLine error={error} busy={busy} onRetry={retry} />}
+        <button type="submit" disabled={busy} className={`${primary} disabled:opacity-60`}>
+          {busy ? 'Saving…' : editing ? 'Save Host' : 'Add Host'}
         </button>
       </form>
     </Sheet>
   );
 }
+
+/** What one probe found: reachable plus the herdr Muxes it saw, or why it did not connect. */
+function ProbeLine({ result }: { result: ProbeResult & { code?: string } }) {
+  const muxes = result.sessions?.length ? ` · herdr: ${result.sessions.join(', ')}` : '';
+  return (
+    <p role="status" className="flex items-start gap-2 text-[13px]">
+      <span
+        aria-hidden
+        className={`mt-1.5 size-2 shrink-0 rounded-full ${result.online ? 'bg-ok' : 'bg-danger'}`}
+      />
+      <span className={`min-w-0 break-words ${result.online ? 'text-fg' : 'text-danger'}`}>
+        {result.online ? `reachable${muxes}` : (result.error ?? why(result.code ?? 'network'))}
+      </span>
+    </p>
+  );
+}
+
+/** The probe's own failures, in words. A bad target is the one the Hub answers with a 400. */
+const why = (code: string) =>
+  code === 'target' ? 'Enter a target like user@host' : code === 'network' ? 'No connection to the Hub' : code;
 
 export function Toggle({
   label,
@@ -203,6 +358,3 @@ export function InstallHint() {
     </p>
   );
 }
-
-// ponytail: adding a Host writes hosts.json in phase 3.
-const noop = () => {};

@@ -31,6 +31,13 @@ One **Hub** per always-on Host. Remote Hosts need only `sshd` and the multiplexe
 uses the Hub user's own SSH configuration. The phone has one origin, one service worker,
 one push subscription.
 
+**Remote Hosts change nothing above the socket.** For each remote herdr Mux the Hub runs one
+`ssh -L <local>.sock:<remote>.sock` forwarder and points `HerdrMux` at the forwarded local
+socket; the adapter dials a unix socket either way and does not know which Host it reached.
+Remote tmux is the same idea over a ControlMaster connection, so `tmux -S` runs on the other
+side with one TCP handshake, not one per command. Everything above — the Mux registry, the
+state projection, Seen, SSE, push — is unchanged.
+
 ### What the phone sees
 
 ```mermaid
@@ -173,10 +180,12 @@ capability flags: the UI hides write actions when `kind === 'tmux'`.
 | `GET /api/push/vapid` | the Hub's VAPID public key, base64url |
 | `POST /api/push/subscribe` (a `PushSubscription` as JSON) | store the subscription |
 | `DELETE /api/push/subscribe` `{endpoint}` | forget it |
-| `GET /api/settings` | trusted user, what serves the app, and the Smart replies provider, model and flag |
+| `POST /api/hosts/probe` `{target, session?}` | dial a target once and save nothing → `{online, sessions?, error?}`; 400 `{error: 'target'}` for a target that is not `user@host` |
+| `POST /api/hosts/:id/retry` | re-dial one Host, local or remote → the updated `StateHost`; the SSE `state` event is the receipt |
+| `GET /api/settings` | trusted user, the login this request carries, what serves the app, `hosts.json`, and the Smart replies provider, model and flag |
+| `PUT /api/settings` `{trustedUser?, hosts?}` | replace either; an omitted key is left alone, `trustedUser: null` unlocks → the new `Settings` |
 | `POST /api/settings/suggest` `{enabled}` | turn Smart replies on or off on the Hub; the Hub persists the flag |
 | `POST /api/panes/:key/suggest` | draft Smart replies for this Pane now → the StatePane; needs `TAUT_SUGGEST`; no-op while the Hub flag is off or a request for that revision is already in flight |
-| `PUT /api/settings` | phase 5 |
 
 The four write routes answer `{error}` with 400 (empty or over-80-character label, `cwd`
 not absolute), 403 (Origin), 404 (unknown Mux, Workspace or Pane), 501 `unsupported`
@@ -190,7 +199,10 @@ service that answers 404 or 410 has its subscription dropped from `state.json`.
 
 Auth: the Hub binds to loopback and expects `tailscale serve` in front. Every non-GET
 request must carry an `Origin` whose host equals the `Host` header. If a trusted login is
-configured, the `Tailscale-User-Login` header must match.
+configured, the `Tailscale-User-Login` header must match, or the request is 403
+`{error: 'login'}`. `PUT /api/settings` may only lock the Hub to the login that request
+itself carries; any other value is 400 `{error: 'login'}`, so one phone cannot lock a Hub to
+somebody else's identity.
 
 ## Web app (`web/`)
 
@@ -206,10 +218,10 @@ variables.
 
 | Path | Content |
 |---|---|
-| `$XDG_CONFIG_HOME/taut/hosts.json` | Hosts added from the settings screen |
-| `$XDG_STATE_HOME/taut/state.json` | `seen`, `vapid: {publicKey, privateKey}`, `subscriptions: [...]`, trusted user |
+| `$XDG_CONFIG_HOME/taut/hosts.json` | an array of `HostConfig` (`{id, label?, target, session?, herdr?, tmux?}`), written whole by `PUT /api/settings {hosts}` from the Hosts screen |
+| `$XDG_STATE_HOME/taut/state.json` | `seen`, `vapid: {publicKey, privateKey}`, `subscriptions: [...]`, `trustedUser` |
 | `$XDG_CACHE_HOME/taut/` | `attachments/<unix-ms>-<name>` |
-| `$XDG_RUNTIME_DIR/taut/` | forwarded sockets, SSH control sockets |
+| `$XDG_RUNTIME_DIR/taut/` | one forwarded socket per remote Mux, `<hostId>-<session>.sock`, beside its `cm-*` ControlMaster socket. With no `XDG_RUNTIME_DIR` the directory is `/tmp/taut-<uid>`; either way it is mode 0700, because a unix socket a second user can open is a second user on the Mux |
 
 ## Environment
 

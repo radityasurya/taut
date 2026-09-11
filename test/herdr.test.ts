@@ -20,6 +20,7 @@ const snapshot = {
 };
 
 beforeAll(async () => {
+  if (process.env.CODEX_SANDBOX_NETWORK_DISABLED === '1') return;
   server = createServer(socket => {
     let buffer = '';
     socket.setEncoding('utf8');
@@ -35,9 +36,9 @@ beforeAll(async () => {
   });
   await new Promise<void>(resolve => server.listen(socketPath, resolve));
 });
-afterAll(() => { server.close(); try { unlinkSync(socketPath); } catch {} });
+afterAll(() => { server?.close(); try { unlinkSync(socketPath); } catch {} });
 
-describe('HerdrMux.read', () => {
+describe.skipIf(process.env.CODEX_SANDBOX_NETWORK_DISABLED === '1')('HerdrMux.read', () => {
   test('asks for less recent text than the pane is tall', async () => {
     // herdr 0.8.0 turns pathologically slow (~30 ms/line) once `lines` reaches the pane
     // height, so a 50-row pane must be asked for at most 48.
