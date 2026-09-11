@@ -389,7 +389,10 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
     if (method === 'GET') return json(s.settings);
     if (method === 'PUT') { Object.assign(s.settings, body as object); return json(s.settings); }
   }
-  if (method === 'POST' && url.pathname.startsWith('/api/push/')) return json({ ok: true });
+  // ponytail: just enough that the push wiring does not crash under `?mock`. The key is
+  // not a real P-256 point, so `pushManager.subscribe` still refuses it in the browser.
+  if (method === 'GET' && url.pathname === '/api/push/vapid') return json({ publicKey: 'mock-vapid-public-key' });
+  if (url.pathname === '/api/push/subscribe') return noContent();
 
   // The Hub re-dials the Host. The fixture Host stays down, which is the honest answer
   // for a machine that is actually unreachable.
@@ -444,7 +447,7 @@ export function installMock(): void {
   const s: Store = {
     state: structuredClone(mockState),
     screens: structuredClone(mockScreens),
-    settings: { pushEnabled: true, trustedUser: 'dev@mbp', servedBy: 'tailscale serve · 127.0.0.1:7700' },
+    settings: { trustedUser: 'dev@mbp', servedBy: 'tailscale serve · 127.0.0.1:7700' },
   };
   store = s;
 

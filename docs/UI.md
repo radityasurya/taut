@@ -133,6 +133,19 @@ the current one scrolls itself into view), a push toggle, a Haptics toggle on
 Android only, the iOS install hint, and read-only Access rows for the trusted
 login and what serves the app. Hosts live on their own tab, not here.
 
+The push toggle is the only control with a failure state, so it has five:
+
+| State | What you see |
+|---|---|
+| Off | The plain switch. `taut.push` in `localStorage` is `0` or absent |
+| On | The switch is on. The browser holds a subscription and the Hub has its endpoint |
+| Denied | The switch flips back and a muted caption reads "Notifications are blocked for this site. Allow them in your browser settings, then turn this on again." |
+| Unsupported | The same caption pattern: "This browser does not support push notifications." |
+| iOS, not installed | The install hint sits under the toggle: push reaches only the app you added to the Home Screen |
+
+The caption is one muted `text-caption` line, in the flow under the row. No
+toast, no dialog: turning a switch on is not worth an overlay.
+
 ## Sheets — `web/sheets.tsx`, `web/switch.tsx`
 
 Bottom sheets are the shadcn Drawer (vaul): swipe to dismiss, scroll lock,
@@ -161,3 +174,16 @@ the whole app; it reopens when the watched Pane changes, and a hairline
 `Reconnecting` bar shows while it is down. The floating bottom tab bar
 (Agents · Hosts · Settings) badges unseen `blocked` Panes and hides itself
 whenever a text field has focus, so the keyboard never covers the composer.
+
+The **app badge** on the installed icon counts more than the tab badge does:
+unseen `blocked` plus unseen `done`, the same set the **Needs you** section
+holds. `web/app.tsx` writes it on every `state` event through `setBadge()` in
+`web/push.ts`, which is a no-op where `navigator.setAppBadge` is missing.
+
+The **service worker** (`web/public/sw.js`) caches the shell it is built with:
+`vite.config.ts` stamps `index.html`, the manifest and every hashed asset into
+`self.__PRECACHE`, and the cache is named after that list. Navigations and
+`/api/*` are network-first and fall back to the cache, hashed assets under
+`/assets/` are cache-first, and `/api/events` is never intercepted, because
+buffering an SSE stream through a worker stops it. In dev the worker registers
+only with `?sw` in the URL, so Vite keeps its own reload path.

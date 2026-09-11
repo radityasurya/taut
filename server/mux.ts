@@ -1,9 +1,10 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { generateKeyPairSync } from 'node:crypto';
 import os from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseAnsi } from '../shared/ansi.ts';
-import type { Explain, InputBody, Mux, Screen, ScreenEvent, ScreenMode, State, Tree } from '../shared/types.ts';
+import type { Explain, InputBody, Mux, PushSubscriptionBody, Screen, ScreenEvent, ScreenMode, State, Tree } from '../shared/types.ts';
+import { sendPush, type VapidKeys } from './push.ts';
 
 export interface HubListener {
   onState(s: State): void;
@@ -12,7 +13,9 @@ export interface HubListener {
   mode?: ScreenMode;
 }
 
-type Entry = { hostId: string; mux: Mux; tree?: Tree; refresh?: Promise<void>; again: boolean; timer?: ReturnType<typeof setTimeout>; unsubscribe: () => void };
+type Entry = { hostId: string; mux: Mux; tree?: Tree; refresh?: Promise<void>; again: boolean; timer?: ReturnType<typeof setTimeout>; interval?: ReturnType<typeof setInterval>; unsubscribe: () => void };
+
+interface StoredState { seen: Record<string, number>; vapid?: VapidKeys; subscriptions?: PushSubscriptionBody[] }
 
 export class Hub {
   private entries = new Map<string, Entry>();
@@ -28,17 +31,33 @@ export class Hub {
   private seenTimer?: ReturnType<typeof setTimeout>;
   private lastStateAt = 0;
   private readonly statePath: string;
+  private vapid: VapidKeys;
+  private subscriptions: PushSubscriptionBody[];
+  private readonly refreshMs: number;
 
-  constructor() {
+  constructor(opts: { refreshMs?: number } = {}) {
+    this.refreshMs = opts.refreshMs ?? 15_000;
     const root = process.env.XDG_STATE_HOME || join(os.homedir(), '.local/state');
     this.statePath = join(root, 'taut/state.json');
-    try { this.seen = JSON.parse(readFileSync(this.statePath, 'utf8')).seen ?? {}; } catch {}
+    let stored: StoredState = { seen: {} };
+    try { stored = JSON.parse(readFileSync(this.statePath, 'utf8')); } catch {}
+    this.seen = stored.seen ?? {};
+    this.subscriptions = stored.subscriptions ?? [];
+    if (stored.vapid) this.vapid = stored.vapid;
+    else {
+      const pair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+      const publicJwk = pair.publicKey.export({ format: 'jwk' });
+      const privateJwk = pair.privateKey.export({ format: 'jwk' });
+      this.vapid = { publicKey: Buffer.concat([Buffer.from([4]), Buffer.from(publicJwk.x!, 'base64url'), Buffer.from(publicJwk.y!, 'base64url')]).toString('base64url'), privateKey: privateJwk.d! };
+      this.save();
+    }
   }
 
   add(hostId: string, mux: Mux): void {
     const key = `${hostId}/${mux.id}`;
     const entry: Entry = { hostId, mux, again: false, unsubscribe: () => {} };
     entry.unsubscribe = mux.onChange(ids => this.changed(key, ids));
+    if (this.refreshMs > 0) entry.interval = setInterval(() => void this.refresh(key).catch(() => {}), this.refreshMs);
     this.entries.set(key, entry);
     this.cached = undefined;
   }
@@ -123,7 +142,20 @@ export class Hub {
       for (const pane of entry.tree.panes) {
         const key = `${muxKey}/${pane.id}`;
         const previous = this.statuses.get(key);
-        if (pane.status === 'blocked' && previous?.status !== 'blocked') console.log(`taut: ${key} → blocked`);
+        if (pane.status === 'blocked' && previous?.status !== 'blocked') {
+          console.log(`taut: ${key} → blocked`);
+          const workspace = entry.tree.workspaces.find(item => item.id === pane.workspaceId);
+          const payload = JSON.stringify({
+            title: `${pane.agent?.trim() || 'Agent'} needs you`,
+            body: `${workspace?.label ?? pane.workspaceId} · ${this.lastLines.get(key)?.line || pane.title}`,
+            url: `#/pane/${key}`, tag: key,
+          });
+          // ponytail: independent sends are enough until subscription counts become large.
+          for (const subscription of [...this.subscriptions]) void sendPush(subscription, payload, this.vapid).then(response => {
+            if (response.status === 404 || response.status === 410) this.removeSubscription(subscription.endpoint);
+            else if (!response.ok) console.warn(`taut: push ${response.status} ${subscription.endpoint}`);
+          }).catch(error => console.warn(`taut: push failed ${subscription.endpoint}`, error));
+        }
         const status = previous?.status === pane.status ? previous : { status: pane.status, at: Date.now() };
         this.statuses.set(key, status);
         state.panes.push({ key, muxKey, ...pane, seenRevision: this.seen[key] ?? 0, lastLine: pane.agent ? this.lastLines.get(key)?.line : undefined, statusChangedAt: status.at });
@@ -166,11 +198,22 @@ export class Hub {
 
   markSeen(paneKey: string, revision: number): void {
     this.seen[paneKey] = revision; this.recompute(); this.emitState(); clearTimeout(this.seenTimer);
-    this.seenTimer = setTimeout(() => void this.saveSeen(), 100);
+    this.seenTimer = setTimeout(() => this.save(), 100);
   }
-  private async saveSeen(): Promise<void> {
-    await mkdir(dirname(this.statePath), { recursive: true });
-    await writeFile(this.statePath, `${JSON.stringify({ seen: this.seen }, null, 2)}\n`);
+  private save(): void {
+    mkdirSync(dirname(this.statePath), { recursive: true });
+    writeFileSync(this.statePath, `${JSON.stringify({ seen: this.seen, vapid: this.vapid, subscriptions: this.subscriptions }, null, 2)}\n`);
+  }
+  vapidPublicKey(): string { return this.vapid.publicKey; }
+  addSubscription(subscription: PushSubscriptionBody): void {
+    const index = this.subscriptions.findIndex(item => item.endpoint === subscription.endpoint);
+    if (index < 0) this.subscriptions.push(subscription); else this.subscriptions[index] = subscription;
+    this.save();
+  }
+  removeSubscription(endpoint: string): void {
+    const next = this.subscriptions.filter(item => item.endpoint !== endpoint);
+    if (next.length === this.subscriptions.length) return;
+    this.subscriptions = next; this.save();
   }
 
   subscribe(listener: HubListener): () => void {
@@ -191,7 +234,7 @@ export class Hub {
     }, wait);
   }
   close(): void {
-    for (const entry of this.entries.values()) { entry.unsubscribe(); entry.mux.close(); clearTimeout(entry.timer); }
+    for (const entry of this.entries.values()) { entry.unsubscribe(); entry.mux.close(); clearTimeout(entry.timer); clearInterval(entry.interval); }
     clearTimeout(this.stateTimer); clearTimeout(this.seenTimer);
     for (const timer of this.screenTimers.values()) clearTimeout(timer);
   }

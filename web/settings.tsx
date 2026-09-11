@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getTheme, setTheme, THEMES } from './app.tsx';
 import type { Theme } from './app.tsx';
 import { InstallHint, Toggle } from './hosts.tsx';
+import { disablePush, enablePush, pushOn } from './push.ts';
 
 const LABELS: Record<Theme, string> = {
   system: 'System',
@@ -25,7 +26,6 @@ const SWATCH: Record<Theme, string | null> = {
 };
 
 interface Prefs {
-  pushEnabled?: boolean;
   trustedUser?: string;
   servedBy?: string;
 }
@@ -36,6 +36,10 @@ export function Settings() {
   const [theme, choose] = useState(getTheme);
   const [prefs, setPrefs] = useState<Prefs>({});
   const [haptics, setHaptics] = useState(() => localStorage.getItem('taut.haptics') !== 'off');
+  // Push state is the browser's, not the Hub's: the intent in localStorage plus a live
+  // permission. `/api/settings` has no push field to read.
+  const [push, setPush] = useState(pushOn);
+  const [pushNote, setPushNote] = useState('');
 
   useEffect(() => {
     fetch('/api/settings')
@@ -90,9 +94,23 @@ export function Settings() {
       <Toggle
         label="Push when an agent is blocked"
         hint="Done shows as a badge only"
-        checked={prefs.pushEnabled ?? false}
-        onChange={(v) => save({ pushEnabled: v })}
+        checked={push}
+        onChange={async (v) => {
+          setPushNote('');
+          setPush(v);
+          if (!v) return void disablePush();
+          const result = await enablePush();
+          if (result.ok) return;
+          setPush(false);
+          setPushNote(result.message);
+        }}
       />
+      {pushNote && (
+        <p role="status" className="px-4 pb-2 text-caption leading-relaxed text-muted">
+          {pushNote}
+        </p>
+      )}
+      <InstallHint />
       {android && (
         <>
           <div className="ml-4 border-t border-border/60" />
@@ -107,7 +125,6 @@ export function Settings() {
           />
         </>
       )}
-      <InstallHint />
 
       <h2 className="label-caps px-4 pt-6 pb-1">Access</h2>
       <div className="flex min-h-12 items-center gap-3 px-4 py-2">

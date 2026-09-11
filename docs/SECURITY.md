@@ -45,9 +45,28 @@ flowchart LR
 
 - Listen on a non-loopback interface by default (`TAUT_BIND` changes this; do not).
 - Store passwords, SSH keys, or tokens. `state.json` holds Seen markers, push subscriptions,
-  VAPID keys for Web Push, and the optional trusted login.
+  the VAPID key pair for Web Push, and the optional trusted login.
 - Render terminal output through `innerHTML`. Screens are text spans.
 - Move focus or write state into a multiplexer beyond the input you send.
+
+## Push notifications
+
+Two things leave the Hub when push is on.
+
+- **`state.json` becomes a credential.** It holds the VAPID **private** key and one push
+  endpoint per device. Anyone who reads the file can send notifications to your phone in
+  the Hub's name. The file lives under `$XDG_STATE_HOME/taut` (`~/.local/state/taut`), is
+  written by the Hub user, and belongs in no backup you share. Delete it to revoke every
+  subscription: the Hub makes a new key pair on the next start, and each phone re-subscribes
+  the next time you open the app.
+- **A notification says what the agent wants.** The payload carries the agent name, the
+  Workspace label and one line of the Pane's output. It travels encrypted end to end
+  (RFC 8291), so Apple and Google relay it without reading it — but the phone shows it in
+  the notification tray, over the lock screen, on the watch. Treat the tray as public and
+  turn push off if that one line can be sensitive.
+
+The Hub never pushes for `done`, only for a Pane that enters `blocked`, so the tray sees
+one line per question, not a stream.
 
 ## Hardening checklist
 

@@ -68,7 +68,7 @@ sequenceDiagram
     end
     P->>H: POST /api/panes/w1/p3/input {text, keys}
     H->>M: pane.send_text · pane.send_keys
-    Note over H: Status → blocked triggers a push (phase 3)
+    Note over H: Status → blocked sends one push
 ```
 
 
@@ -145,7 +145,12 @@ capability flags: the UI hides write actions when `kind === 'tmux'`.
 
 - Registry of Muxes keyed `<hostId>/<muxId>`; Panes keyed `<hostId>/<muxId>/<paneId>`.
 - Any change from an adapter → 200 ms debounce → `tree()` → Status diff → SSE `state`
-  (throttled to 2/s). A Status transition to `blocked` triggers a push (phase 3).
+  (throttled to 2/s).
+- Every Mux also refreshes its snapshot every 15 s (`new Hub({refreshMs})`, `0` disables
+  it). It is a safety net: herdr sends no event when a pane stops producing output, so a
+  Status that settles into `blocked` between events would otherwise arrive late.
+- A Status **transition** into `blocked` sends one push per subscription. A Pane that is
+  already `blocked` sends nothing, and `done` never pushes — it is a badge.
 - Each SSE client may watch one Pane: changes on it → 150 ms debounce → `read()` → SSE `screen`.
 - **Seen** is `{paneKey: revision}` persisted in `state.json`; unseen = `revision > seen`.
 - The Hub never calls any `*.focus` method.
@@ -162,7 +167,14 @@ capability flags: the UI hides write actions when `kind === 'tmux'`.
 | `GET /api/panes/:key/explain` | Explain or null |
 | `POST /api/panes/:key/attach` (raw body, `X-Name`) | phase 4 |
 | `POST /api/panes/:key/close`, `/api/muxes/:key/tabs`, `/api/muxes/:key/workspaces`, `/api/rename` | phase 7 |
-| `GET\|PUT /api/settings`, `/api/push/*` | phases 3 and 5 |
+| `GET /api/push/vapid` | the Hub's VAPID public key, base64url |
+| `POST /api/push/subscribe` (a `PushSubscription` as JSON) | store the subscription |
+| `DELETE /api/push/subscribe` `{endpoint}` | forget it |
+| `GET\|PUT /api/settings` | phase 5 |
+
+The Hub encrypts each payload itself (RFC 8291, aes128gcm) and signs the request (RFC
+8292, VAPID) with WebCrypto in `server/push.ts`; there is no `web-push` dependency. A push
+service that answers 404 or 410 has its subscription dropped from `state.json`.
 
 Auth: the Hub binds to loopback and expects `tailscale serve` in front. Every non-GET
 request must carry an `Origin` whose host equals the `Host` header. If a trusted login is
@@ -172,15 +184,18 @@ configured, the `Tailscale-User-Login` header must match.
 
 Hash router, one `EventSource`, no state library. Screens: **Home** (flat Pane list grouped
 by Workspace, unseen `blocked` first), **Pane** (grid of spans from `shared/ansi.ts`, recent
-mode, key bar, composer with mic and attach), **Settings**. Themes are `data-theme` values
-on `<html>`; each defines chrome tokens and sixteen ANSI colors as CSS variables.
+mode, key bar, composer with mic and attach), **Settings**. `web/push.ts` owns the
+subscription and the app badge; `web/public/sw.js` shows the notification, routes the tap
+and caches the shell, and `vite.config.ts` stamps the built file list into it. Themes are
+`data-theme` values on `<html>`; each defines chrome tokens and sixteen ANSI colors as CSS
+variables.
 
 ## Files on the Hub
 
 | Path | Content |
 |---|---|
 | `$XDG_CONFIG_HOME/taut/hosts.json` | Hosts added from the settings screen |
-| `$XDG_STATE_HOME/taut/state.json` | Seen, push subscriptions, VAPID keys, trusted user |
+| `$XDG_STATE_HOME/taut/state.json` | `seen`, `vapid: {publicKey, privateKey}`, `subscriptions: [...]`, trusted user |
 | `$XDG_CACHE_HOME/taut/` | attachments |
 | `$XDG_RUNTIME_DIR/taut/` | forwarded sockets, SSH control sockets |
 

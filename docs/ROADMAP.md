@@ -76,9 +76,23 @@ Verify: trigger a permission prompt in a real Pane; the card shows buttons; a ta
 
 ## Phase 3 — push
 
-- [ ] VAPID keys generated on first run into `state.json`
-- [ ] `web/public/sw.js`, `manifest.webmanifest`, install hint on iOS
-- [ ] Push only on Status → `blocked`; app badge for unseen `blocked` + `done`
+`[~]` = built and driven in an emulated phone, awaiting verification on a real device.
+
+- [x] VAPID keys generated on first run into `state.json` — `server/push.ts` encrypts
+      (RFC 8291) and signs (RFC 8292) with WebCrypto, `server/mux.ts` keeps the pair and
+      the subscriptions; `test/push.test.ts` covers aes128gcm, TTL, urgency, the
+      `Authorization` header and pruning a subscription the push service answers with 410
+- [x] `web/public/sw.js`, `manifest.webmanifest`, install hint on iOS — the worker shows
+      the notification, routes the tap and caches the shell from the `self.__PRECACHE`
+      list that the `taut-sw-precache` plugin in `vite.config.ts` stamps into it;
+      `web/push.ts` subscribes and `web/settings.tsx` owns the toggle and the install hint
+- [x] Push only on Status → `blocked`; app badge for unseen `blocked` + `done` —
+      `server/mux.ts` sends on the transition only; `web/app.tsx` writes the badge from
+      SSE state with `setBadge()` from `web/push.ts`
+- [~] Installed PWA receives a notification — an emulated Pixel on a real Hub registered
+      `sw.js`, subscribed to FCM, got 204 from `POST /api/push/subscribe` and left the
+      endpoint in `state.json`; turning the toggle off pruned it again. A real iPhone and
+      a real Android, and the tap that opens the Pane, are pending
 
 Verify: installed PWA on iPhone and Android receives a notification; tapping opens the Pane.
 

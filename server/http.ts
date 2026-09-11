@@ -1,5 +1,5 @@
 import { resolve, sep } from 'node:path';
-import type { InputBody, ScreenMode, SeenBody } from '../shared/types.ts';
+import type { InputBody, PushSubscriptionBody, ScreenMode, SeenBody } from '../shared/types.ts';
 import { HerdrMux } from './herdr.ts';
 import { discoverLocalMuxes, hostId } from './hosts.ts';
 import type { Hub } from './mux.ts';
@@ -27,6 +27,23 @@ export function startHttp(hub: Hub, opts: {
       // ponytail: Tailscale-User-Login check in phase 5.
       try {
         if (req.method === 'GET' && url.pathname === '/api/state') return json(await hub.state());
+        if (req.method === 'GET' && url.pathname === '/api/push/vapid') return json({ publicKey: hub.vapidPublicKey() });
+        if (req.method === 'POST' && url.pathname === '/api/push/subscribe') {
+          let body: PushSubscriptionBody;
+          try { body = await req.json(); } catch { return json({ error: 'body' }, 400); }
+          let validEndpoint = false;
+          try { validEndpoint = ['http:', 'https:'].includes(new URL(body?.endpoint).protocol); } catch {}
+          if (!validEndpoint || typeof body?.keys?.p256dh !== 'string' || !body.keys.p256dh || typeof body.keys.auth !== 'string' || !body.keys.auth ||
+            body.expirationTime !== undefined && body.expirationTime !== null && typeof body.expirationTime !== 'number')
+            return json({ error: 'body' }, 400);
+          hub.addSubscription(body); return new Response(null, { status: 204 });
+        }
+        if (req.method === 'DELETE' && url.pathname === '/api/push/subscribe') {
+          let body: { endpoint?: unknown };
+          try { body = await req.json(); } catch { return json({ error: 'body' }, 400); }
+          if (typeof body?.endpoint !== 'string' || !body.endpoint) return json({ error: 'body' }, 400);
+          hub.removeSubscription(body.endpoint); return new Response(null, { status: 204 });
+        }
         const hostRetry = url.pathname.match(/^\/api\/hosts\/([^/]+)\/retry$/);
         if (req.method === 'POST' && hostRetry) {
           let id: string;
@@ -93,7 +110,7 @@ export function startHttp(hub: Hub, opts: {
         if (!await file.exists()) { path = resolve(root, 'index.html'); file = Bun.file(path); }
         if (!await file.exists()) return new Response('taut web build not found; run pnpm build\n', { status: 404 });
         const headers = new Headers();
-        if (path.endsWith('/index.html') || path.endsWith('/sw.js')) headers.set('cache-control', 'no-cache');
+        if (path.endsWith('/index.html') || path.endsWith('/sw.js') || path.endsWith('/manifest.webmanifest')) headers.set('cache-control', 'no-cache');
         if (file.type) headers.set('content-type', file.type);
         return new Response(req.method === 'HEAD' ? null : file, { headers });
       } catch (error) {

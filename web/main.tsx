@@ -2,12 +2,17 @@ import { lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app.tsx';
 import { installMock } from './mock.ts';
+import { startPush } from './push.ts';
 import './theme.css';
 
 // A no-op unless the page was opened with `?mock`.
 // ponytail: imported unconditionally, so the fixtures ride along in the bundle (~6 KB
 // gzipped). Move behind a dynamic import if the bundle budget ever bites.
 installMock();
+
+// Registers `/sw.js` in a build, or in dev with `?sw`. Everything else about push waits
+// for the Settings toggle.
+startPush();
 
 // Agentation: dev-only annotation overlay that hands UI notes to Claude Code over MCP
 // (see .mcp.json). Desktop pointers only; it is not built for touch and never ships.

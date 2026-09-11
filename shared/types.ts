@@ -67,6 +67,11 @@ export interface ScreenEvent extends Screen { key: string }
 export interface InputBody { text?: string; keys?: string[] }
 /** POST /api/panes/:key/seen */
 export interface SeenBody { revision: number }
+/** POST /api/push/subscribe */
+export interface PushSubscriptionBody {
+  endpoint: string; expirationTime?: number | null;
+  keys: { p256dh: string; auth: string };
+}
 
 // ---- ANSI spans (shared/ansi.ts) ----
 // fg/bg: a number 0..15 is a palette index (render as `var(--ansi-N)`);

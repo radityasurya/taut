@@ -7,6 +7,7 @@ import { Hosts } from './hosts.tsx';
 import { AgentsTab, HostsTab, SettingsTab } from './icons.tsx';
 import { mockOpen } from './mock.ts';
 import { PaneScreen } from './pane.tsx';
+import { setBadge } from './push.ts';
 import { Settings } from './settings.tsx';
 
 // ---- theme ----
@@ -230,6 +231,12 @@ export function App() {
   const paneKey = route.startsWith('/pane/') ? decodeURIComponent(route.slice('/pane/'.length)) : undefined;
   const { state, screen, connected } = useEvents(paneKey);
   const needsYou = state?.panes.filter((p) => p.status === 'blocked' && unseen(p)).length ?? 0;
+
+  // The app icon counts what the Needs you section holds: unseen `blocked` and `done`.
+  // The tab badge stays stricter, because only `blocked` is worth a push.
+  useEffect(() => {
+    setBadge(state?.panes.filter((p) => (p.status === 'blocked' || p.status === 'done') && unseen(p)).length ?? 0);
+  }, [state]);
 
   return (
     <>
