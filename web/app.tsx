@@ -69,8 +69,10 @@ export function useEvents(paneKey?: string) {
       });
     on<State>('state', setState);
     on<ScreenEvent>('screen', setScreen);
-    es.onopen = () => setConnected(true);
+    es.onopen = () => { setConnected(true); debug.opens++; debug.log('open'); };
+    es.addEventListener('state', () => { debug.events++; debug.log('state'); });
     es.onerror = () => {
+      debug.errors++; debug.log(`error readyState=${es.readyState}`);
       setConnected(false);
       // The browser only retries a dropped stream. An HTTP error (Hub restarting) closes
       // the EventSource for good, so reopen it ourselves.
@@ -83,6 +85,24 @@ export function useEvents(paneKey?: string) {
   }, [paneKey, attempt]);
 
   return { state, screen, connected };
+}
+
+// ---- ?debug overlay: stream diagnostics readable on a phone with no devtools ----
+// ponytail: module-level counters, one fixed box; remove when Safari SSE is settled.
+export const debug = {
+  opens: 0, events: 0, errors: 0, lines: [] as string[],
+  log(line: string) { this.lines = [...this.lines.slice(-7), `${new Date().toISOString().slice(11, 19)} ${line}`]; debugTick?.(); },
+};
+let debugTick: (() => void) | undefined;
+export function DebugOverlay() {
+  const [, tick] = useState(0);
+  useEffect(() => { debugTick = () => tick((n) => n + 1); return () => { debugTick = undefined; }; }, []);
+  if (!new URLSearchParams(location.search).has('debug')) return null;
+  return (
+    <pre className="fixed inset-x-2 bottom-24 z-[60] max-h-56 overflow-auto rounded-lg border border-border bg-elevated p-2 font-mono text-[11px] leading-snug text-fg shadow-lg">
+      {`ua ${navigator.userAgent.slice(0, 80)}\nsse opens=${debug.opens} state-events=${debug.events} errors=${debug.errors}\n${debug.lines.join('\n')}`}
+    </pre>
+  );
 }
 
 // ---- router ----
@@ -201,6 +221,7 @@ export function App() {
 
   return (
     <>
+      <DebugOverlay />
       {!connected && (
         <div role="status" className="fixed inset-x-0 top-0 z-50 h-0.5 animate-pulse bg-warn" title="Reconnecting">
           <span className="sr-only">Reconnecting</span>
