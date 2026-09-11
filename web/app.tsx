@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { AnchorHTMLAttributes } from 'react';
 import type { ScreenEvent, State } from '../shared/types.ts';
-import { Home, unseen } from './home.tsx';
+import { Home, seedSeen, unseen } from './home.tsx';
 import { Hosts } from './hosts.tsx';
 import { AgentsTab, HostsTab, SettingsTab } from './icons.tsx';
 import { mockOpen } from './mock.ts';
@@ -67,7 +67,7 @@ export function useEvents(paneKey?: string) {
         setConnected(true);
         set(JSON.parse((e as MessageEvent<string>).data) as T);
       });
-    on<State>('state', setState);
+    on<State>('state', value => { seedSeen(value.panes); setState(value); });
     on<ScreenEvent>('screen', setScreen);
     es.onopen = () => { setConnected(true); debug.opens++; debug.log('open'); };
     es.addEventListener('state', () => { debug.events++; debug.log('state'); });

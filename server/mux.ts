@@ -54,7 +54,9 @@ export class Hub {
   private changed(muxKey: string, ids: string[] | 'all'): void {
     const entry = this.entries.get(muxKey); if (!entry) return;
     clearTimeout(entry.timer);
-    entry.timer = setTimeout(() => void this.refresh(muxKey), 200);
+    // Nobody awaits this one, so a Mux that dies mid-refresh must not raise an unhandled
+    // rejection: the routes that do await refresh still see the error and answer 502.
+    entry.timer = setTimeout(() => void this.refresh(muxKey).catch(() => {}), 200);
     for (const listener of this.listeners) {
       if (!listener.paneKey || !listener.onScreen) continue;
       const parsed = this.resolve(listener.paneKey);

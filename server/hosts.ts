@@ -5,6 +5,9 @@ import { join } from 'node:path';
 export const hostId = os.hostname();
 
 export async function discoverLocalMuxes(): Promise<{ id: string; socketPath: string }[]> {
+  if (process.env.HERDR_SOCKET_PATH) {
+    try { await access(process.env.HERDR_SOCKET_PATH); return [{ id: 'default', socketPath: process.env.HERDR_SOCKET_PATH }]; } catch { return []; }
+  }
   try {
     const process = Bun.spawn(['herdr', 'session', 'list', '--json'], { stdout: 'pipe', stderr: 'ignore' });
     const output = await new Response(process.stdout).text();

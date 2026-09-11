@@ -3,6 +3,8 @@ import type { Explain, Mux, Pane, Screen, ScreenMode, Tree, Workspace } from '..
 import { startHttp } from '../server/http.ts';
 import { hostId } from '../server/hosts.ts';
 import { Hub } from '../server/mux.ts';
+import { offeredKeys } from '../shared/blocked.ts';
+import { isUnseen } from '../shared/seen.ts';
 
 test('Hub adds tabs, status timestamps, and cached agent last lines', async () => {
   let reads = 0;
@@ -66,4 +68,31 @@ test('host retry runs discovery and returns the refreshed host', async () => {
   expect(await response.json()).toEqual({ id: hostId, label: hostId, online: true, source: 'local' });
   expect(discoveries).toBe(1);
   expect(refreshes).toBe(1);
+});
+
+test('a new device seeds done revisions while blocked panes remain actionable', () => {
+  const base = { muxKey: 'local/fake', workspaceId: 'w1', tabId: 't1', title: 'Pane', seenRevision: 0 };
+  const done = { ...base, key: 'done', id: 'done', status: 'done' as const, revision: 7 };
+  const blocked = { ...base, key: 'blocked', id: 'blocked', status: 'blocked' as const, revision: 4 };
+  const seeded = { [done.key]: done.revision, [blocked.key]: blocked.revision };
+  expect(isUnseen(done, seeded)).toBe(false);
+  expect(isUnseen(blocked, seeded)).toBe(true);
+  expect(isUnseen({ ...done, statusChangedAt: 2_000_000_000_000 }, { done: 1_900_000_000_000 })).toBe(true);
+});
+
+test('offeredKeys leads with Yes/No on an approval box and leaves a plain menu alone', () => {
+  const footer = [{ key: 'esc', label: 'cancel' }, { key: 'enter', label: 'confirm' }];
+  const approval: Explain = {
+    ruleId: 'live_blocked_form', state: 'blocked', hintKeys: footer,
+    detection: 'Bash command\nDo you want to proceed?\n\u276f 1. Yes\n3. No, and tell Claude what to do differently (esc)\n',
+  };
+  // The preset leads and the footer's own names for the same two keys drop.
+  expect(offeredKeys(approval)).toEqual([{ key: 'enter', label: 'Yes' }, { key: 'esc', label: 'No' }]);
+  // Idempotent: the Hub applies it, the card applies it again.
+  expect(offeredKeys({ ...approval, hintKeys: offeredKeys(approval) })).toEqual(offeredKeys(approval));
+  const menu: Explain = {
+    ruleId: 'live_blocked_form', state: 'blocked', hintKeys: footer,
+    detection: 'Select a model\n\u276f 1. Opus\n2. Sonnet\n',
+  };
+  expect(offeredKeys(menu)).toEqual(footer);
 });

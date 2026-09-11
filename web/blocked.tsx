@@ -1,11 +1,6 @@
+import { offeredKeys } from '../shared/blocked.ts';
 import type { Explain } from '../shared/types.ts';
 import { Ansi } from './pane.tsx';
-
-/** A permission prompt always answers to enter/esc, even when herdr names no hint keys. */
-const PRESETS = [
-  { key: 'enter', label: 'Yes' },
-  { key: 'esc', label: 'No' },
-];
 
 const BOX = /[─-╿▀-▟]/g;
 
@@ -26,8 +21,7 @@ const content = (detection: string) =>
  * action. Sending is the caller's job: this card never talks to the Hub.
  */
 export function Blocked({ explain, onKeys }: { explain: Explain; onKeys: (keys: string[]) => void }) {
-  const offered = explain.ruleId.includes('permission') ? [...explain.hintKeys, ...PRESETS] : explain.hintKeys;
-  const keys = offered.filter((k, i) => offered.findIndex((o) => o.key === k.key) === i);
+  const keys = offeredKeys(explain);
   const [head = 'Blocked', ...rest] = content(explain.detection);
   const title = plain(head).trim();
 
@@ -35,7 +29,7 @@ export function Blocked({ explain, onKeys }: { explain: Explain; onKeys: (keys: 
     <section
       role="region"
       aria-label="Blocked"
-      className="mx-3 mb-2.5 flex flex-col gap-2.5 rounded-card border border-border bg-elevated px-3.5 py-3 shadow-elevated"
+      className="rise mx-3 mb-2.5 flex flex-col gap-2.5 rounded-card border border-border bg-elevated px-3.5 py-3 shadow-elevated"
     >
       <div className="flex items-center justify-between gap-3">
         <h2 className="truncate text-[13px] font-semibold">{title}</h2>
@@ -54,7 +48,7 @@ export function Blocked({ explain, onKeys }: { explain: Explain; onKeys: (keys: 
             key={k.key}
             type="button"
             onClick={() => onKeys([k.key])}
-            className={`flex h-10 flex-1 items-center justify-center gap-2 rounded-chip text-[14px] ${
+            className={`press flex h-10 flex-1 items-center justify-center gap-2 rounded-chip text-[14px] ${
               i === 0 ? 'bg-accent font-semibold text-bg' : 'border border-border bg-bg font-medium text-fg active:bg-surface'
             }`}
           >
@@ -68,7 +62,7 @@ export function Blocked({ explain, onKeys }: { explain: Explain; onKeys: (keys: 
             type="button"
             aria-label={k}
             onClick={() => onKeys([k])}
-            className="flex size-10 shrink-0 items-center justify-center rounded-chip border border-border bg-bg font-mono text-[14px] active:bg-surface"
+            className="press flex size-10 shrink-0 items-center justify-center rounded-chip border border-border bg-bg font-mono text-[14px] active:bg-surface"
           >
             {k === 'up' ? '↑' : '↓'}
           </button>

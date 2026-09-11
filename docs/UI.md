@@ -29,6 +29,18 @@ forces a theme, `&open=switch|more|newtab|newworkspace|addhost` opens a sheet.
 | `text-title` | 17/1.25/600 | screen and sheet titles |
 | `label-caps` | 11px, 600, `.08em`, uppercase | section headings |
 
+## Motion
+
+Four movements, all in `web/theme.css`, all off under
+`prefers-reduced-motion: reduce`.
+
+| Movement | What |
+|---|---|
+| Screen push | `::view-transition-new(root)`, 200 ms; `navigate()` skips the transition entirely under reduced motion |
+| Tab underline | one accent bar under the Tab strip, `transition: transform, width` 200 ms ease-out, measured from the selected tab |
+| Blocked card | `.rise`: `translateY(10px)` and opacity over 200 ms, same curve as the push |
+| Press | `.press`: `scale(0.97)` while `:active`, 120 ms ease-out, on rows, chips, tabs and key caps |
+
 Colours come from `data-theme` on `<html>`: seven themes, each defining the
 chrome tokens plus 16 ANSI colours (`web/theme.css`). shadcn's variable names
 are aliased onto taut's tokens in the same file; `--border` is deliberately not
@@ -51,6 +63,10 @@ is a button: tap collapses (persisted in `localStorage`), long-press (500 ms,
 cancelled by 10 px of movement) opens the group menu. Collapsed, it summarises
 its most urgent Status, for example `2 blocked`.
 
+On a new device, an empty local Seen map is seeded from the first snapshot's
+current Pane revisions, so old `done` work does not immediately fill **Needs you**.
+A `blocked` Pane is always actionable and appears there regardless of Seen history.
+
 A row is one link with one `aria-label`; every visual part inside it is
 `aria-hidden`. Line 1 is the Agent name plus the title; line 2 is the Pane's
 last line, or `basename(cwd)` in mono when there is none. The 8 px Dot is
@@ -66,9 +82,13 @@ Dot, the Status word (`aria-live="polite"`), Agent and Workspace. Right side:
 Switch, Read aloud (Agent Panes only) and More. Under it, the **Tab strip**
 lists that Workspace's Tabs, each with a 6 px Dot rolled up from its Panes,
 then `+` for New Tab, then the grid chip at the right end (`80×24`, or
-`80×24 · fit` when pressed). Fit scales the `<pre>` to the viewport width;
-horizontal swipe on the strip moves between Tabs. When the open Tab holds
-several Panes, a chip row lists them.
+`80×24 · fit` when pressed). Fit scales the `<pre>` to the room the scroller
+leaves after its own left padding. A horizontal **touch** swipe on the strip
+moves between Tabs: Chromium gives a horizontal drag to the nearest scroller
+and fires `pointercancel`, so the gesture reads `touchend`, and it is ignored
+when the strip itself scrolled, which is what a drag means once there are more
+Tabs than fit. One accent underline slides between the Tabs. When the open Tab
+holds several Panes, a chip row lists them.
 
 The grid renders the `visible` screen as styled ANSI spans, pinned to the
 bottom until you scroll up, when a **New output** pill appears. Content wider
@@ -78,14 +98,25 @@ More) reflows it client-side.
 
 When Status is `blocked`, `web/blocked.tsx` draws a card above the dock: the
 detection's first line as a heading, the rule id, up to two excerpt lines in
-the agent's colours, and one button per hint key (`enter`/`esc` are always
-offered on a permission rule) plus ↑/↓. It fades 150 ms after the Status
-clears.
+the agent's colours, and one button per offered key plus ↑/↓. It rises into
+place over 200 ms and fades 150 ms after the Status clears.
+
+`shared/blocked.ts` decides which keys the card offers, and the Hub applies the
+same function on the way out, so `GET /api/panes/:key/explain` already carries
+them. A prompt whose rule id names a permission or approval, **or** whose box
+offers Yes / Allow / Accept as its first option, leads with the preset
+`enter` = **Yes** and `esc` = **No**; the Mux's own hint keys follow, minus the
+duplicates, because the footer's `esc to cancel` and `enter to confirm` are the
+preset under another name. The id alone is not enough: a real Claude Code
+permission box matches `live_blocked_form`, never `bash_permission_prompt`.
 
 The dock is the only place with input: a horizontally scrolling key bar (a
 longer set for shell Panes), and — for Agent Panes only — the composer, with
 dictation into the field, an attach button, and Send. Enter sends; Shift+Enter
-inserts a newline.
+inserts a newline. The mic replaces Send only while the field is empty **and**
+the browser has `webkitSpeechRecognition`; with no engine the disabled Send
+button keeps its place rather than offering a mic that does nothing. A
+transcript lands in the field for review and is never sent on its own.
 
 ## Hosts (`#/hosts`) — `web/hosts.tsx`
 

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { parseAnsi } from '../shared/ansi.ts';
 import type { Explain, InputBody, ScreenEvent, SeenBody, Span, State, StatePane, Status } from '../shared/types.ts';
@@ -8,30 +8,7 @@ import { Dot, markSeen, statusText } from './home.tsx';
 import { Attach, Back, Down, Mic, More, Plus, Send, Speaker, Switch2 } from './icons.tsx';
 import { ConfirmCloseSheet, MenuSheet, NewTabSheet, RenameSheet } from './sheets.tsx';
 import { SwitchDrawer } from './switch.tsx';
-
-/** herdr key names, with the label shown on the cap. Ordered by real use, agent first. */
-const AGENT_KEYS: [name: string, label: string][] = [
-  ['esc', 'esc'],
-  ['up', '↑'],
-  ['down', '↓'],
-  ['tab', 'tab'],
-  ['shift+tab', 'shift+tab'],
-  ['enter', 'enter'],
-  ['ctrl+c', 'ctrl+c'],
-];
-const SHELL_KEYS: [name: string, label: string][] = [
-  ['esc', 'esc'],
-  ['tab', 'tab'],
-  ['up', '↑'],
-  ['down', '↓'],
-  ['left', '←'],
-  ['right', '→'],
-  ['enter', 'enter'],
-  ['ctrl+c', 'ctrl+c'],
-  ['ctrl+d', 'ctrl+d'],
-  ['ctrl+l', 'ctrl+l'],
-  ['ctrl+r', 'ctrl+r'],
-];
+import { AGENT_KEYS, SHELL_KEYS } from './keys.ts';
 
 const color = (c: number | string | undefined) => (typeof c === 'number' ? `var(--ansi-${c})` : c);
 
@@ -149,14 +126,18 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
   useEffect(() => {
     const el = pre.current;
     if (!el || !el.parentElement) return setScale(1);
-    setScale(fit ? Math.min(1, el.parentElement.clientWidth / el.scrollWidth) : 1);
+    // The scroller carries the grid's left padding, so the room the `<pre>` actually has is
+    // narrower than the scroller. Measuring against `clientWidth` alone left Fit on and the
+    // last column still cut off.
+    const room = el.parentElement.clientWidth - parseFloat(getComputedStyle(el.parentElement).paddingLeft || '0');
+    setScale(fit ? Math.min(1, room / el.scrollWidth) : 1);
     measure();
   }, [fit, wrap, lines, viewportW]);
 
   // Mark Seen once the screen settles: Seen is taut's own flag, never written to the Mux.
   useEffect(() => {
     if (!screen) return;
-    markSeen(paneKey);
+    markSeen(paneKey, screen.revision);
     const t = setTimeout(() => void post(paneKey, 'seen', { revision: screen.revision } satisfies SeenBody), 1000);
     return () => clearTimeout(t);
   }, [paneKey, screen?.revision]);
@@ -189,6 +170,15 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
       return { id, label: label || panes[0]?.title || id, panes, status: rollUp(panes) };
     });
   }, [state, pane?.muxKey, pane?.workspaceId]);
+
+  // One underline that slides, rather than a border that jumps: measured from the selected
+  // tab, so a relabelled or newly created Tab moves it without a second source of truth.
+  const strip = useRef<HTMLDivElement>(null);
+  const [underline, setUnderline] = useState({ x: 0, w: 0 });
+  useLayoutEffect(() => {
+    const on = strip.current?.querySelector<HTMLElement>('[aria-selected="true"]');
+    setUnderline(on ? { x: on.offsetLeft, w: on.offsetWidth } : { x: 0, w: 0 });
+  }, [tabs, pane?.tabId, viewportW]);
 
   const openTab = (id: string) => {
     const tab = tabs.find((t) => t.id === id);
@@ -227,7 +217,11 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
     synth.speak(new SpeechSynthesisUtterance(lastBlock(screen?.text)));
   };
 
-  const swipe = useRef(0);
+  // Touch, not pointer: the moment a horizontal drag starts, Chromium hands the gesture to
+  // the nearest scroller and fires `pointercancel`, so `pointerup` never arrives on a phone.
+  // `touchend` always does. The strip's own scroll position guards the ambiguous case —
+  // with more Tabs than fit, dragging scrolls the strip and must not also switch Tab.
+  const swipe = useRef({ x: 0, scroll: 0 });
   const rec = useRef<Recognition | null>(null);
   const [listening, setListening] = useState(false);
   const dictate = () => {
@@ -264,6 +258,8 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
 
   const agent = pane?.agent;
   const status = pane?.status ?? 'unknown';
+  // No engine, no button: Send stays in place, disabled, rather than a mic that does nothing.
+  const canDictate = 'webkitSpeechRecognition' in window;
   const active = tabs.find((t) => t.id === pane?.tabId);
   const grid = pane?.cols && pane.rows ? `${pane.cols}×${pane.rows}` : 'fit';
 
@@ -324,15 +320,18 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
       {/* Tab strip, browser-tab position. Swipe here, never on the grid. */}
       <div
         className="flex shrink-0 items-center pt-0.5 pr-3 pb-2 pl-2"
-        onPointerDown={(e) => (swipe.current = e.clientX)}
-        onPointerUp={(e) => {
-          const dx = e.clientX - swipe.current;
-          if (Math.abs(dx) < 40 || !active) return;
+        onTouchStart={(e) => {
+          swipe.current = { x: e.touches[0]?.clientX ?? 0, scroll: strip.current?.scrollLeft ?? 0 };
+        }}
+        onTouchEnd={(e) => {
+          const dx = (e.changedTouches[0]?.clientX ?? 0) - swipe.current.x;
+          const scrolled = Math.abs((strip.current?.scrollLeft ?? 0) - swipe.current.scroll) > 4;
+          if (scrolled || Math.abs(dx) < 40 || !active) return;
           const i = tabs.indexOf(active) + (dx < 0 ? 1 : -1);
           if (tabs[i]) openTab(tabs[i].id);
         }}
       >
-        <div role="tablist" aria-label="Tabs" className="hscroll mx-1 flex flex-1 items-end gap-0.5 border-b border-border">
+        <div ref={strip} role="tablist" aria-label="Tabs" className="hscroll relative mx-1 flex flex-1 items-end gap-0.5 border-b border-border">
           {tabs.map((t) => {
             const on = t.id === pane?.tabId;
             return (
@@ -342,8 +341,8 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
                 role="tab"
                 aria-selected={on}
                 onClick={() => openTab(t.id)}
-                className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-2.5 pt-2 pb-2.5 text-[13px] whitespace-nowrap ${
-                  on ? 'border-accent font-semibold text-fg' : 'border-transparent font-medium text-muted'
+                className={`press flex shrink-0 items-center gap-1.5 px-2.5 pt-2 pb-3 text-[13px] whitespace-nowrap ${
+                  on ? 'font-semibold text-fg' : 'font-medium text-muted'
                 }`}
               >
                 <Dot status={t.status} seen={t.status === 'idle' || t.status === 'unknown'} size={6} />
@@ -352,6 +351,12 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
               </button>
             );
           })}
+          <span
+            aria-hidden
+            data-testid="tab-underline"
+            className="absolute bottom-[-1px] left-0 h-0.5 bg-accent transition-[transform,width] duration-200 ease-out motion-reduce:transition-none"
+            style={{ width: underline.w, transform: `translateX(${underline.x}px)` }}
+          />
         </div>
         <button
           type="button"
@@ -365,7 +370,7 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
           type="button"
           aria-pressed={fit}
           onClick={() => setFit(!fit)}
-          className={`shrink-0 rounded-chip border px-2.5 py-[5px] font-mono text-[11px] ${
+          className={`press shrink-0 rounded-chip border px-2.5 py-[5px] font-mono text-[11px] ${
             fit ? 'border-accent bg-accent font-semibold text-bg' : 'border-border text-muted'
           }`}
         >
@@ -385,7 +390,7 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
                 haptic();
                 navigate(`#/pane/${encodeURIComponent(p.key)}`);
               }}
-              className={`flex shrink-0 items-center gap-1.5 rounded-chip px-2.5 py-1 text-[12px] ${
+              className={`press flex shrink-0 items-center gap-1.5 rounded-chip px-2.5 py-1 text-[12px] ${
                 p.key === paneKey ? 'bg-surface font-medium text-fg' : 'text-muted'
               }`}
             >
@@ -463,7 +468,7 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
               type="button"
               aria-label={name}
               onClick={() => keys([name])}
-              className={`flex h-9 shrink-0 items-center justify-center rounded-chip border border-border bg-bg px-3 font-mono text-caption active:bg-surface ${
+              className={`press flex h-9 shrink-0 items-center justify-center rounded-chip border border-border bg-bg px-3 font-mono text-caption active:bg-surface ${
                 name === 'ctrl+c' ? 'text-danger' : 'text-fg'
               }`}
             >
@@ -494,12 +499,15 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
                 placeholder={`Reply to ${agent[0]!.toUpperCase()}${agent.slice(1)}…`}
                 className="max-h-24 min-h-9 flex-1 resize-none self-center bg-transparent py-2 text-body leading-5 placeholder:text-muted focus:outline-none"
               />
-              {text.trim() ? (
+              {text.trim() || !canDictate ? (
                 <button
                   type="button"
                   onClick={send}
+                  disabled={!text.trim()}
                   aria-label="Send"
-                  className="flex size-9 shrink-0 items-center justify-center rounded-chip bg-accent text-bg"
+                  className={`press flex size-9 shrink-0 items-center justify-center rounded-chip ${
+                    text.trim() ? 'bg-accent text-bg' : 'bg-surface text-muted'
+                  }`}
                 >
                   <Send />
                 </button>
@@ -509,7 +517,7 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
                   onClick={dictate}
                   aria-label="Dictate"
                   aria-pressed={listening}
-                  className={`flex size-9 shrink-0 items-center justify-center ${listening ? 'text-accent' : 'text-muted'}`}
+                  className={`press flex size-9 shrink-0 items-center justify-center ${listening ? 'text-accent' : 'text-muted'}`}
                 >
                   <Mic />
                 </button>

@@ -356,6 +356,26 @@
   to { opacity: 0 }
 }
 
+/* Anything tappable answers the finger: 3 % of scale, back in 120 ms. Rows, chips and
+   key caps share it, so a press feels the same everywhere. */
+@utility press {
+  transition: transform 120ms ease-out;
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
+/* The blocked card is the one thing that appears unasked, so it rises into place instead
+   of popping. Same curve and length as the screen push. */
+@utility rise {
+  animation: taut-rise 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes taut-rise {
+  from { transform: translateY(10px); opacity: 0 }
+  to { transform: none; opacity: 1 }
+}
+
 /* Unlayered, so it outranks the utilities layer without fighting specificity. */
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),
@@ -364,7 +384,16 @@
     animation: none !important;
   }
 
-  .fade {
+  .fade,
+  .rise {
     animation: none !important;
+  }
+
+  .press {
+    transition: none !important;
+  }
+
+  .press:active {
+    transform: none !important;
   }
 }

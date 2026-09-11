@@ -5,6 +5,7 @@ import { Link, opensWith } from './app.tsx';
 import { ChevronDown, ChevronRight, Plus } from './icons.tsx';
 import { Skeleton } from '@/components/ui/skeleton.tsx';
 import { MenuSheet, NewTabSheet, NewWorkspaceSheet, RenameSheet } from './sheets.tsx';
+import { isUnseen } from '../shared/seen.ts';
 
 // ---- status ----
 
@@ -38,26 +39,30 @@ export function Dot({ status, seen, size = 8 }: { status: Status; seen?: boolean
 }
 
 // ---- seen ----
-// taut's own flag, never written back to the Mux: a Pane is seen once it was opened after
-// its Status last changed. One localStorage map, read through a module cache.
+// taut's own flag, never written back to the Mux. One revision map, read through a module cache.
 
 let seenAt: Record<string, number> | null = null;
 const seen = () => (seenAt ??= JSON.parse(localStorage.getItem('taut.seen') ?? '{}') as Record<string, number>);
 
-export function markSeen(key: string) {
-  seen()[key] = Date.now();
+export function markSeen(key: string, revision: number) {
+  seen()[key] = revision;
   localStorage.setItem('taut.seen', JSON.stringify(seen()));
+}
+
+/** Seed a new device from its first snapshot. Blocked remains actionable regardless. */
+export function seedSeen(panes: StatePane[]) {
+  const current = seen();
+  if (Object.keys(current).length) return;
+  for (const pane of panes) current[pane.key] = pane.revision;
+  localStorage.setItem('taut.seen', JSON.stringify(current));
 }
 
 /**
  * `idle` means the user already looked (CONTEXT.md) and `unknown` is all tmux can report,
- * so neither can be unseen. Falls back to the revision counter on a Hub that does not
- * send `statusChangedAt` yet.
+ * so neither can be unseen. Legacy timestamp entries remain readable while each Pane
+ * migrates to a revision the next time it is opened.
  */
-export const unseen = (p: StatePane) =>
-  p.status !== 'idle' &&
-  p.status !== 'unknown' &&
-  (p.statusChangedAt ? (seen()[p.key] ?? 0) < p.statusChangedAt : p.revision > p.seenRevision);
+export const unseen = (p: StatePane) => isUnseen(p, seen());
 
 export function timeAgo(at?: number): string {
   if (!at) return '';
@@ -97,7 +102,7 @@ function Row({ pane, first }: { pane: StatePane; first?: boolean }) {
         aria-label={[pane.agent ?? 'shell', pane.title, pane.status, fresh ? 'unseen' : 'seen', when]
           .filter(Boolean)
           .join(', ')}
-        className="flex min-h-14 items-center gap-3 px-4 py-2.5 active:bg-surface"
+        className="press flex min-h-14 items-center gap-3 px-4 py-2.5 active:bg-surface"
       >
         <Dot status={pane.status} seen={!fresh} />
         <span aria-hidden className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -238,7 +243,7 @@ export function Home({ state }: { state: State | null }) {
               type="button"
               aria-pressed={host === h.id}
               onClick={() => setHost(h.id)}
-              className={`shrink-0 rounded-chip px-3 py-1.5 text-caption ${
+              className={`press shrink-0 rounded-chip px-3 py-1.5 text-caption ${
                 host === h.id ? 'bg-accent font-semibold text-bg' : 'bg-surface font-medium text-muted'
               } ${h.online ? '' : 'line-through'}`}
             >

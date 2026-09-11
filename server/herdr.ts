@@ -1,5 +1,6 @@
 import { basename } from 'node:path';
 import { createConnection, type Socket } from 'node:net';
+import { offeredKeys } from '../shared/blocked.ts';
 import type { Explain, Mux, Pane, Screen, ScreenMode, Status, Tree, Workspace } from '../shared/types.ts';
 
 type Json = Record<string, any>;
@@ -100,8 +101,8 @@ export class HerdrMux implements Mux {
           hintKeys.push({ key: match[1]!.toLowerCase(), label: match[2]!.trim() });
         }
       }
-      if (value.matched_rule?.id?.includes('permission')) hintKeys.unshift({ key: 'y', label: 'Yes' }, { key: 'n', label: 'No' });
-      return { ruleId: value.matched_rule?.id ?? '', state: statuses.has(value.state) ? value.state : 'unknown', detection, hintKeys };
+      const explain: Explain = { ruleId: value.matched_rule?.id ?? '', state: statuses.has(value.state) ? value.state : 'unknown', detection, hintKeys };
+      return { ...explain, hintKeys: offeredKeys(explain) };
     } catch (error) {
       if (error instanceof Error && error.message.startsWith('agent_not_found:')) return null;
       throw error;

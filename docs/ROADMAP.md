@@ -54,12 +54,22 @@ Verify:
 
 `[~]` = built on mock data, awaiting verification on a real phone.
 
-- [~] Explain card: built on mock data; verify against a real blocked Claude Code prompt on the phone
-- [~] Seen: built (localStorage + POST); verify the unseen sort on a real device
+- [~] Explain card: driven end to end in an emulated iPhone against a real Claude Code
+      permission box in a throwaway herdr — herdr matched `live_blocked_form`, the card
+      offered Yes/enter and No/esc, and a tap sent `enter` to the Pane. Real phone pending
+- [~] Seen: driven end to end in an emulated iPhone — a fresh device starts with an empty
+      **Needs you**, an unseen `done` Pane enters it, opening the Pane POSTs
+      `/api/panes/:key/seen`, and the row leaves. A throwaway herdr freezes every `revision`
+      at 0, so the unseen comparison was fed a seeded value; verify it on a real device
 - [x] Wrap and Fit on the grid (replaced the Recent mode; see DESIGN.md "Terminal width on a phone")
-- [~] Swipe between Tabs on the strip: built, not yet exercised on a device
-- [~] Read-aloud and mic: built, not yet exercised on a device
-- [ ] `test/mux.contract.test.ts` for herdr on a throwaway socket (`test/ansi.test.ts`, `test/herdr.test.ts`, `test/mux.test.ts` exist)
+- [~] Swipe between Tabs on the strip: exercised with emulated touch, which found that
+      Chromium cancels the pointer stream mid-drag; the gesture now reads `touchend` and the
+      grid never receives it. Real finger pending
+- [~] Read-aloud and mic: exercised in an emulated iPhone against stubbed engines —
+      read-aloud speaks the last block, the mic is absent with no engine, and a transcript
+      lands in the composer without sending. Real iOS dictation and voices pending
+- [x] `test/mux.contract.test.ts` and `test/blocked.contract.test.ts` for herdr on a
+      throwaway socket (`test/ansi.test.ts`, `test/herdr.test.ts`, `test/mux.test.ts` exist)
 
 Verify: trigger a permission prompt in a real Pane; the card shows buttons; a tap answers.
 `bun test` is green. Confirm `herdr server` honours `HERDR_SOCKET_PATH` first.
