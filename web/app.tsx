@@ -99,7 +99,7 @@ export function DebugOverlay() {
   useEffect(() => { debugTick = () => tick((n) => n + 1); return () => { debugTick = undefined; }; }, []);
   if (!new URLSearchParams(location.search).has('debug')) return null;
   return (
-    <pre className="fixed inset-x-2 bottom-24 z-[60] max-h-56 overflow-auto rounded-lg border border-border bg-elevated p-2 font-mono text-[11px] leading-snug text-fg shadow-lg">
+    <pre className="fixed inset-x-2 bottom-24 z-[60] mx-auto max-w-[420px] max-h-56 overflow-auto rounded-lg border border-border bg-elevated p-2 font-mono text-[11px] leading-snug text-fg shadow-lg">
       {`ua ${navigator.userAgent.slice(0, 80)}\nsse opens=${debug.opens} state-events=${debug.events} errors=${debug.errors}\n${debug.lines.join('\n')}`}
     </pre>
   );
@@ -183,7 +183,7 @@ function TabBar({ route, badge }: { route: string; badge: number }) {
   return (
     <nav
       aria-label="Sections"
-      className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+8px)] z-40 flex h-13 items-center justify-around rounded-tabbar border border-border bg-elevated/88 px-2 shadow-elevated backdrop-blur-md"
+      className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+8px)] z-40 mx-auto flex h-13 w-auto max-w-[420px] items-center justify-around rounded-tabbar border border-border bg-elevated/88 px-2 shadow-elevated backdrop-blur-md"
     >
       {TABS.map(({ to, label, Icon }) => {
         const on = to === `#${route}` || (to === '#/' && route === '/');

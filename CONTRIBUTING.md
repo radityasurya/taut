@@ -9,6 +9,9 @@ Thanks for helping. taut is small and opinionated; this page tells you how to fi
 3. Run `make dev`. It installs dependencies on first run, frees the ports, starts the Hub
    and Vite, maps `tailscale serve`, and prints the local and tailnet URLs.
 4. Open the tailnet URL on the phone. `make stop` cleans up.
+5. On a desktop browser the dev build shows the Agentation overlay: annotate any element and
+   the note reaches Claude Code through the MCP server in `.mcp.json` (start it once with
+   `claude mcp list` to confirm it is registered). The overlay never ships in a build.
 
 ## Before you write code
 
