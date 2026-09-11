@@ -96,12 +96,24 @@ export const debug = {
 let debugTick: (() => void) | undefined;
 export function DebugOverlay() {
   const [, tick] = useState(0);
+  const [open, setOpen] = useState(false);
   useEffect(() => { debugTick = () => tick((n) => n + 1); return () => { debugTick = undefined; }; }, []);
   if (!new URLSearchParams(location.search).has('debug')) return null;
   return (
-    <pre className="fixed inset-x-2 bottom-24 z-[60] mx-auto max-w-[420px] max-h-56 overflow-auto rounded-lg border border-border bg-elevated p-2 font-mono text-[11px] leading-snug text-fg shadow-lg">
-      {`ua ${navigator.userAgent.slice(0, 80)}\nsse opens=${debug.opens} state-events=${debug.events} errors=${debug.errors}\n${debug.lines.join('\n')}`}
-    </pre>
+    <div className="fixed right-2 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-[60] flex flex-col items-end gap-1">
+      {open && (
+        <pre className="max-h-56 w-[min(420px,calc(100vw-1rem))] overflow-auto rounded-lg border border-border bg-elevated p-2 font-mono text-[11px] leading-snug text-fg shadow-lg">
+          {`ua ${navigator.userAgent.slice(0, 80)}\nsse opens=${debug.opens} state-events=${debug.events} errors=${debug.errors}\n${debug.lines.join('\n')}`}
+        </pre>
+      )}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="rounded-chip border border-border bg-elevated px-2.5 py-1 font-mono text-[11px] text-muted shadow-elevated"
+      >
+        debug · {debug.events}/{debug.errors}
+      </button>
+    </div>
   );
 }
 

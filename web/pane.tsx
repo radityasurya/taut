@@ -106,7 +106,10 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
   const lines = useMemo(() => (screen ? parseAnsi(screen.text) : []), [screen]);
 
   const [wrap, setWrap] = useState(false);
-  const [fit, setFit] = useState(false);
+  // Fit is on unless the user turned it off: the scale is min(1, …), so a grid that already
+  // fits is left alone and a wide one never scrolls sideways.
+  const [fit, setFitState] = useState(() => localStorage.getItem('taut.fit') !== 'off');
+  const setFit = (v: boolean) => { localStorage.setItem('taut.fit', v ? 'on' : 'off'); setFitState(v); };
   const [scale, setScale] = useState(1);
   const [fade, setFade] = useState(false);
   const [fresh, setFresh] = useState(false);
@@ -135,9 +138,12 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
     measure();
   }, [lines]);
 
+  // Window width feeds the Fit scale, so a rotation or a desktop resize re-fits the grid.
+  const [viewportW, setViewportW] = useState(() => innerWidth);
   useEffect(() => {
-    addEventListener('resize', measure);
-    return () => removeEventListener('resize', measure);
+    const onResize = () => { setViewportW(innerWidth); measure(); };
+    addEventListener('resize', onResize);
+    return () => removeEventListener('resize', onResize);
   }, []);
 
   useEffect(() => {
@@ -145,7 +151,7 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
     if (!el || !el.parentElement) return setScale(1);
     setScale(fit ? Math.min(1, el.parentElement.clientWidth / el.scrollWidth) : 1);
     measure();
-  }, [fit, wrap, lines]);
+  }, [fit, wrap, lines, viewportW]);
 
   // Mark Seen once the screen settles: Seen is taut's own flag, never written to the Mux.
   useEffect(() => {
@@ -247,7 +253,7 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
 
   if (state && !pane) {
     return (
-      <div className="mx-auto flex max-w-2xl flex-col items-start gap-3 px-4 pt-[calc(env(safe-area-inset-top)+4rem)]">
+      <div className="mx-auto flex max-w-2xl flex-col items-start gap-3 px-4 pt-[calc(env(safe-area-inset-top)+4rem)] lg:max-w-4xl">
         <p className="text-body">Pane closed</p>
         <a href="#/" className="text-body text-accent">
           ‹ All panes
@@ -262,7 +268,7 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
   const grid = pane?.cols && pane.rows ? `${pane.cols}×${pane.rows}` : 'fit';
 
   return (
-    <div className="mx-auto flex h-dvh max-w-2xl flex-col pt-[env(safe-area-inset-top)]">
+    <div className="mx-auto flex h-dvh max-w-2xl flex-col pt-[env(safe-area-inset-top)] lg:max-w-4xl">
       <header className="flex h-11 shrink-0 items-center gap-1 pr-2 pl-1">
         <a href="#/" aria-label="All panes" className="flex size-11 shrink-0 items-center justify-center text-accent">
           <Back />
