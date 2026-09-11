@@ -36,7 +36,7 @@ The Pane screen is two bars and a grid between them.
 | Top bar | 44 px back chevron · title · status line "● status · agent · workspace ⌄" · actions: Switch (grid icon), read aloud (speaker), more (⋯) | Status line tap opens the Switch drawer. More holds Wrap, Rename, Close Pane, Resize to phone (v2) |
 | Tab strip | Directly under the top bar, browser-tab position: one tab per Tab of the Workspace with status dot, label, Pane count when the Tab holds several; active tab underlined in accent; + creates a Tab; Fit chip (label = grid size) at the right end | Tap switches Tab; swipe on the strip too. When the active Tab holds several Panes a row of small Pane pills appears under the strip |
 | Blocked card | floats above the dock, `--elevated`, 1 px hairline | Only while Status is `blocked` |
-| Bottom dock | `--elevated`, 16 px top radius. Key bar, then the composer on agent Panes | Keyboard pushes the dock up; kept to two rows so the grid keeps its height while typing |
+| Bottom dock | `--elevated`, 16 px top radius. Agent Panes: quick-reply pills, composer, key bar. Shell Panes: key bar only | Key pills (Yes ↵, No esc) send at once; text pills (✦ generated, or static per agent) fill the composer for review. The key bar sits last so it rides above the keyboard like an accessory row |
 
 ## Creating things
 
