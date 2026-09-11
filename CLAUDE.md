@@ -21,6 +21,9 @@ behind the two irreversible choices live in `docs/adr/`.
   `HERDR_SOCKET_PATH`; copy `~/.local/state/herdr/agent-detection/remote` into the isolated
   state tree when contract tests need the downloaded agent manifests.
 - `HERDR_SOCKET_PATH` overrides local Mux discovery in the Hub, which is useful for tests.
+- `pane.report_agent` with a `state` gives the reporter authority: herdr's screen rules still
+  classify (`agent.explain` says blocked) but `agent_status` keeps the reported state. To
+  simulate a blocked Agent, report `--state blocked` explicitly after printing the prompt.
 - The Hub never calls any `*.focus` method. Seen is taut's own flag, never written to a Mux.
 - A real Claude Code permission box matches `live_blocked_form`, not `bash_permission_prompt`.
   `live_blocked_form` has priority 980 and reads `after_last_horizontal_rule`;
