@@ -1,5 +1,5 @@
-import { resolve, sep } from 'node:path';
-import type { InputBody, PushSubscriptionBody, ScreenMode, SeenBody, SuggestSettingBody } from '../shared/types.ts';
+import { isAbsolute, resolve, sep } from 'node:path';
+import type { InputBody, NewTabBody, NewWorkspaceBody, PushSubscriptionBody, RenameBody, ScreenMode, SeenBody, SuggestSettingBody } from '../shared/types.ts';
 import { HerdrMux } from './herdr.ts';
 import { discoverLocalMuxes, hostId } from './hosts.ts';
 import type { Hub } from './mux.ts';
@@ -7,6 +7,10 @@ import { EmptyBody, sanitizeName, TooLarge, writeAttachment } from './attach.ts'
 
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+const plainObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+const validLabel = (value: unknown, required = false) => value === undefined ? !required : typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 80;
+const validCwd = (value: unknown) => value === undefined || typeof value === 'string' && isAbsolute(value);
+const nonEmpty = (value: unknown) => typeof value === 'string' && value.trim().length > 0;
 
 export function startHttp(hub: Hub, opts: {
   port: number; hostname: string; staticDir: string;
@@ -28,6 +32,30 @@ export function startHttp(hub: Hub, opts: {
       // ponytail: Tailscale-User-Login check in phase 5.
       try {
         if (req.method === 'GET' && url.pathname === '/api/state') return json(await hub.state());
+        const muxWrite = url.pathname.match(/^\/api\/muxes\/([^/]+)\/(tabs|workspaces)$/);
+        if (req.method === 'POST' && muxWrite) {
+          let key: string;
+          try { key = decodeURIComponent(muxWrite[1]!); } catch { return json({ error: 'body' }, 400); }
+          let body: unknown;
+          try { body = await req.json(); } catch { return json({ error: 'body' }, 400); }
+          if (!plainObject(body)) return json({ error: 'body' }, 400);
+          if (typeof body.label === 'string') body.label = body.label.trim();
+          if (muxWrite[2] === 'tabs') {
+            if (!nonEmpty(body.workspaceId) || !validCwd(body.cwd) || !validLabel(body.label) || body.agent !== undefined && !nonEmpty(body.agent)) return json({ error: 'body' }, 400);
+            return json(await hub.newTab(key, body as unknown as NewTabBody), 201);
+          }
+          if (!validCwd(body.cwd) || !validLabel(body.label) || body.branch !== undefined && !nonEmpty(body.branch)) return json({ error: 'body' }, 400);
+          return json(await hub.newWorkspace(key, body as NewWorkspaceBody), 201);
+        }
+        if (req.method === 'POST' && url.pathname === '/api/rename') {
+          let body: unknown;
+          try { body = await req.json(); } catch { return json({ error: 'body' }, 400); }
+          if (!plainObject(body)) return json({ error: 'body' }, 400);
+          if (typeof body.label === 'string') body.label = body.label.trim();
+          const targetKeys = ['workspaceId', 'tabId', 'paneId'].filter(key => Object.hasOwn(body, key));
+          if (!nonEmpty(body.muxKey) || !validLabel(body.label, true) || targetKeys.length !== 1 || !nonEmpty(body[targetKeys[0]!])) return json({ error: 'body' }, 400);
+          await hub.rename(body as unknown as RenameBody); return new Response(null, { status: 204 });
+        }
         if (req.method === 'GET' && url.pathname === '/api/settings') return json(hub.settings());
         if (req.method === 'POST' && url.pathname === '/api/settings/suggest') {
           let body: SuggestSettingBody;
@@ -83,12 +111,13 @@ export function startHttp(hub: Hub, opts: {
           });
           return new Response(stream, { headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' } });
         }
-        const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain|attach|suggest)$/);
+        const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain|attach|suggest|close)$/);
         if (match) {
           let key: string;
           try { key = decodeURIComponent(match[1]!); } catch { return json({ error: 'bad pane key' }, 400); }
           if (!await hub.hasPane(key)) return json({ error: 'pane not found' }, 404);
           const action = match[2];
+          if (req.method === 'POST' && action === 'close') { await hub.closePane(key); return new Response(null, { status: 204 }); }
           if (req.method === 'POST' && action === 'suggest') return json(await hub.forceSuggest(key));
           if (req.method === 'POST' && action === 'attach') {
             if (!req.body) return json({ error: 'body' }, 400);
@@ -143,7 +172,9 @@ export function startHttp(hub: Hub, opts: {
         return new Response(req.method === 'HEAD' ? null : file, { headers });
       } catch (error) {
         const message = errorMessage(error);
-        return json({ error: message }, message === 'pane not found' ? 404 : 502);
+        if (message === 'pane not found' || message === 'mux not found' || message === 'workspace not found' || message === 'tab not found') return json({ error: message }, 404);
+        if (message === 'unsupported') return json({ error: message }, 501);
+        return json({ error: message.split(': ')[0] || message }, 502);
       }
     },
   });

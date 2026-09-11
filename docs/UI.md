@@ -244,15 +244,48 @@ title and the meta line.
   Workspace with its Panes under the Tab they belong to. Two taps to any Pane.
 - **New Tab**: label, directory (mono), one Agent chip per known agent plus
   `shell only`, as radio inputs.
-- **New Workspace**: directory, label, optional branch that creates a worktree.
+- **New Workspace**: directory, label, an **As git worktree** switch, and the
+  branch field it reveals.
 - **Rename**: one field, for a Workspace, Tab or Pane.
 - **More**: the ⋯ menu — Wrap, Rename, Close Pane, and a disabled
   `Resize to phone` marked `v2`.
 - **Close Pane** is a Dialog, not a drawer, so a destructive action cannot be
   swiped into by accident.
 
-Creation, rename and close reach herdr in phase 7. Today the sheets validate,
-close, and change nothing.
+### Writes
+
+Four flows reach the Mux, all through `api()` in `web/app.tsx`: one POST, the
+Hub's `{error}` code on a failure, `network` when the fetch never landed.
+
+| Flow | Entry point | Defaults | On success |
+|---|---|---|---|
+| New Tab | `+` at the end of the Tab strip, or long-press a Workspace header → **New Tab** | directory = the Workspace's `cwd`; Agent chip = the Agent most of that Workspace's Panes run, else `shell only` | opens the new Pane from `{paneKey}` |
+| New Workspace | `+` in the Agents header | directory = the parent of the first listed Workspace's `cwd`; worktree off | expands the new group and scrolls it into view once `state` carries it |
+| Rename | long-press a Workspace header → **Rename**; ⋯ → **Rename** on a Pane | the current name, 80 characters at most | the new name arrives with the next `state` |
+| Close Pane | ⋯ → **Close Pane** → the confirm Dialog | — | returns to Agents |
+
+The Hub takes an absolute directory only, so both placeholders show one; in
+practice the field arrives prefilled from State.
+
+A sheet no longer closes on submit: `onSubmit` returns a Promise, the sheet
+closes when it resolves, and a rejection keeps everything typed. While the call
+is out the action reads `Creating…`, `Renaming…` or `Closing…` and is disabled.
+A failure prints one `--danger` line with a **Retry** that sends the same
+payload again: `body` is "Check the name and the directory", `unsupported` is
+"This Mux does not support that", `agent_not_ready` is "Agent did not start", a
+gone Mux or Pane says so, and anything else is "That did not work · `<code>`".
+No toast, like the push toggle's caption.
+
+A `tmux` Mux answers 501 to all four, so taut does not offer them: the Tab
+strip `+`, **New Tab**, **Rename** and **Close Pane** are absent there, and the
+Agents header `+` needs one herdr Mux to appear. Collapse, Wrap and every read
+stay. A Tab has no menu of its own yet, so Tab rename is unreachable from the
+phone even though `POST /api/rename` takes a `tabId`.
+
+Under `?mock` the four routes are answered from the fixtures in `web/mock.ts`:
+the new Tab, Pane and Workspace appear in the list, a rename shows, and a closed
+Pane leaves (with its Tab, when it was the last one). A label of `fail` answers
+502 `agent_not_ready`, which is how to reach the error line.
 
 ## Chrome — `web/app.tsx`
 

@@ -269,5 +269,31 @@ export function post(paneKey: string, path: 'input' | 'seen' | 'suggest', body: 
   }).catch(() => {}); // ponytail: the SSE reconnect indicator is the only error surface in phase 1
 }
 
+/**
+ * POST JSON and say what went wrong. Rejects with the Hub's own `{error}` code, or
+ * `http <status>`, or `network` when the fetch never landed; resolves with the parsed
+ * body (201) or undefined (204). The caller turns the code into a sentence.
+ */
+export async function api<T>(path: string, body?: unknown): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body ?? {}),
+    });
+  } catch {
+    throw new Error('network');
+  }
+  if (!response.ok) {
+    const code = await response
+      .json()
+      .then((v) => (v as { error?: string }).error)
+      .catch(() => undefined);
+    throw new Error(code || `http ${response.status}`);
+  }
+  return (response.status === 204 ? undefined : await response.json()) as T;
+}
+
 /** `?mock&open=switch` lands a screenshot on an open drawer. Always false without `?mock`. */
 export const opensWith = (name: string) => mockOpen() === name;

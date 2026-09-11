@@ -1,8 +1,10 @@
 import { TopBar } from './header.tsx';
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import type { State, StatePane, StateWorkspace, Status } from '../shared/types.ts';
-import { Link, opensWith } from './app.tsx';
+import type {
+  NewTabBody, NewTabResult, NewWorkspaceBody, NewWorkspaceResult, RenameBody, State, StatePane, StateWorkspace, Status,
+} from '../shared/types.ts';
+import { api, Link, navigate, opensWith, reducedMotion } from './app.tsx';
 import { ChevronDown, ChevronRight, Plus } from './icons.tsx';
 import { Skeleton } from '@/components/ui/skeleton.tsx';
 import { MenuSheet, NewTabSheet, NewWorkspaceSheet, RenameSheet } from './sheets.tsx';
@@ -77,6 +79,15 @@ export function timeAgo(at?: number): string {
 
 const RANK: Record<Status, number> = { blocked: 0, working: 1, done: 2, idle: 3, unknown: 4 };
 const basename = (cwd?: string) => cwd?.replace(/\/+$/, '').split('/').pop();
+/** `~/projects/taut` → `~/projects`: where a sibling Workspace would go. */
+export const parentDir = (cwd?: string) => cwd?.replace(/\/+$/, '').replace(/\/[^/]+$/, '') || undefined;
+
+/** The Agent most of these Panes run, `''` when none does: the New Tab chip to preselect. */
+export function commonAgent(panes: StatePane[]): string {
+  const tally = new Map<string, number>();
+  for (const p of panes) if (p.agent) tally.set(p.agent, (tally.get(p.agent) ?? 0) + 1);
+  return [...tally].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+}
 
 /** Blocked reason, else the last non-empty screen line, else the directory. */
 const preview = (p: StatePane) => p.lastLine ?? basename(p.cwd) ?? '';
@@ -190,12 +201,25 @@ export function Home({ state }: { state: State | null }) {
   const [newTab, setNewTab] = useState<StateWorkspace | null>(null);
   const [menu, setMenu] = useState<StateWorkspace | null>(null);
   const [rename, setRename] = useState<StateWorkspace | null>(null);
+  // The Workspace this screen just created: it stays listed until State fills it with a
+  // Pane, and scrolls itself into view the first time State carries it.
+  const [created, setCreated] = useState<string | null>(null);
+  const sections = useRef(new Map<string, HTMLElement>());
+  const scrolled = useRef(false);
 
-  const toggle = (key: string) => {
-    const next = collapsed.includes(key) ? collapsed.filter((k) => k !== key) : [...collapsed, key];
+  const write = (next: string[]) => {
     setCollapsed(next);
     localStorage.setItem(COLLAPSED, JSON.stringify(next));
   };
+  const toggle = (key: string) =>
+    write(collapsed.includes(key) ? collapsed.filter((k) => k !== key) : [...collapsed, key]);
+
+  useEffect(() => {
+    const el = created && sections.current.get(created);
+    if (!el || scrolled.current) return;
+    scrolled.current = true;
+    el.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  }, [state, created]);
 
   const hostOf = (muxKey: string) => state?.muxes.find((m) => m.key === muxKey)?.hostId;
   const hostLabel = (muxKey: string) => state?.hosts.find((h) => h.id === hostOf(muxKey))?.label;
@@ -203,6 +227,8 @@ export function Home({ state }: { state: State | null }) {
     (state?.panes ?? []).filter((p) => p.muxKey === w.muxKey && p.workspaceId === w.id).sort((a, b) => RANK[a.status] - RANK[b.status]);
 
   const visible = (muxKey: string) => !host || hostOf(muxKey) === host;
+  /** Only herdr writes. tmux answers 501, so taut never offers the action. */
+  const writable = (muxKey?: string) => state?.muxes.find((m) => m.key === muxKey)?.kind === 'herdr';
   const needsYou = (state?.panes ?? []).filter((p) => visible(p.muxKey) && unseen(p) && (p.status === 'blocked' || p.status === 'done'));
   const groups = (state?.workspaces ?? [])
     .filter((w) => visible(w.muxKey))
@@ -214,9 +240,30 @@ export function Home({ state }: { state: State | null }) {
         panes: panesOf(w).filter((p) => !needsYou.includes(p)),
       };
     })
-    .filter((g) => g.panes.length > 0 || g.host?.online === false);
+    .filter((g) => g.panes.length > 0 || g.host?.online === false || g.w.key === created);
 
   const tabIn = newTab ?? (opensWith('newtab') ? (groups[0]?.w ?? null) : null);
+  // A new Workspace lands on the Mux the list already shows, next to the Workspace it was
+  // started from: one herdr Mux is the common case, and nothing here asks which.
+  const beside = groups.find((g) => writable(g.w.muxKey))?.w ?? state?.workspaces.find((w) => writable(w.muxKey));
+
+  const createTab = async (w: StateWorkspace, o: { label?: string; cwd?: string; agent?: string }) => {
+    const { paneKey } = await api<NewTabResult>(`/api/muxes/${encodeURIComponent(w.muxKey)}/tabs`, {
+      workspaceId: w.id,
+      ...o,
+    } satisfies NewTabBody);
+    navigate(`#/pane/${encodeURIComponent(paneKey)}`);
+  };
+
+  const createWorkspace = async (o: { cwd: string; label?: string; branch?: string }) => {
+    const { workspaceKey } = await api<NewWorkspaceResult>(
+      `/api/muxes/${encodeURIComponent(beside!.muxKey)}/workspaces`,
+      o satisfies NewWorkspaceBody,
+    );
+    write(collapsed.filter((k) => k !== workspaceKey));
+    scrolled.current = false;
+    setCreated(workspaceKey);
+  };
   const counts = state && `${state.hosts.length} host${state.hosts.length === 1 ? '' : 's'} · ${state.panes.length} panes`;
 
   return (
@@ -226,15 +273,16 @@ export function Home({ state }: { state: State | null }) {
         right={
           <>
           <span className="mr-1.5 text-caption tabular-nums text-muted">{counts}</span>
-          <button
-            type="button"
-            aria-label="New Workspace"
-            onClick={() => setNewWorkspace(true)}
-            className="-mr-2.5 flex size-11 items-center justify-center text-accent"
-          >
-            <Plus size={22} />
-          </button>
-        
+          {beside && (
+            <button
+              type="button"
+              aria-label="New Workspace"
+              onClick={() => setNewWorkspace(true)}
+              className="-mr-2.5 flex size-11 items-center justify-center text-accent"
+            >
+              <Plus size={22} />
+            </button>
+          )}
           </>
         }
       />
@@ -292,7 +340,13 @@ export function Home({ state }: { state: State | null }) {
           {groups.map(({ w, host: h, panes }) => {
             const shut = collapsed.includes(w.key);
             return (
-              <section key={w.key}>
+              <section
+                key={w.key}
+                ref={(el) => {
+                  if (el) sections.current.set(w.key, el);
+                  else sections.current.delete(w.key);
+                }}
+              >
                 <GroupHeader
                   label={w.label}
                   host={h?.label}
@@ -331,33 +385,47 @@ export function Home({ state }: { state: State | null }) {
         </>
       )}
 
-      <NewWorkspaceSheet open={newWorkspace} onClose={() => setNewWorkspace(false)} onSubmit={noop} />
+      <NewWorkspaceSheet
+        open={newWorkspace}
+        onClose={() => setNewWorkspace(false)}
+        cwd={parentDir(beside?.cwd)}
+        onSubmit={createWorkspace}
+      />
       <NewTabSheet
         open={tabIn !== null}
         onClose={() => setNewTab(null)}
         cwd={tabIn?.cwd}
+        agent={commonAgent(tabIn ? panesOf(tabIn) : [])}
         where={
           <>
             in <span className="text-fg">{tabIn?.label}</span> · {hostLabel(tabIn?.muxKey ?? '')}
           </>
         }
-        onSubmit={noop}
+        onSubmit={(o) => createTab(tabIn!, o)}
       />
       <MenuSheet
         open={menu !== null}
         title={menu?.label ?? ''}
         onClose={() => setMenu(null)}
         items={[
-          { label: 'New Tab', onClick: () => setNewTab(menu) },
-          { label: 'Rename', onClick: () => setRename(menu) },
+          ...(writable(menu?.muxKey)
+            ? [
+                { label: 'New Tab', onClick: () => setNewTab(menu) },
+                { label: 'Rename', onClick: () => setRename(menu) },
+              ]
+            : []),
           { label: collapsed.includes(menu?.key ?? '') ? 'Expand' : 'Collapse', onClick: () => menu && toggle(menu.key) },
         ]}
       />
-      <RenameSheet open={rename !== null} kind="Workspace" current={rename?.label ?? ''} onClose={() => setRename(null)} onSubmit={noop} />
+      <RenameSheet
+        open={rename !== null}
+        kind="Workspace"
+        current={rename?.label ?? ''}
+        onClose={() => setRename(null)}
+        onSubmit={(label) =>
+          api<void>('/api/rename', { muxKey: rename!.muxKey, workspaceId: rename!.id, label } satisfies RenameBody)
+        }
+      />
     </div>
   );
 }
-
-// ponytail: creation and rename reach herdr in phase 7. The live Mux is read-only today,
-// so the drawers close and change nothing.
-const noop = () => {};

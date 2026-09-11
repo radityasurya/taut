@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { mkdir, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import { AGENT_KEYS, SHELL_KEYS } from '../web/keys.ts';
 import { herdrAvailable, herdrMux, startThrowawayHerdr } from './harness.ts';
 
@@ -77,6 +79,52 @@ describe.skipIf(!herdrAvailable)('HerdrMux contract', () => {
     await mux.closePane(pane.id);
     const tree = await eventually(() => mux.tree(), value => !value.panes.some(item => item.id === pane.id), 2_000);
     expect(tree.panes.some(item => item.id === pane.id)).toBe(false);
+  });
+
+  test('newTab can start a named agent', async () => {
+    if (!Bun.which('claude')) {
+      try { await mux.newTab(workspaceId, { cwd: fixture.dir, label: 'Agent Tab', agent: 'claude' }); }
+      catch (error) { expect(error).toBeInstanceOf(Error); expect((error as Error).message).toMatch(/^[^:]+:/); return; }
+      throw new Error('agent.start unexpectedly succeeded without claude on PATH');
+    }
+    const pane = await mux.newTab(workspaceId, { cwd: fixture.dir, label: 'Agent Tab', agent: 'claude' });
+    try {
+      const tree = await eventually(() => mux.tree(), value => value.panes.find(item => item.id === pane.id)?.agent === 'claude', 30_000);
+      expect(tree.panes.find(item => item.id === pane.id)?.agent).toBe('claude');
+    } finally { try { await mux.closePane(pane.id); } catch {} }
+  }, 40_000);
+
+  test('newWorkspace creates plain and worktree workspaces', async () => {
+    const plain = await mux.newWorkspace({ cwd: fixture.dir, label: 'plain-workspace' });
+    const plainTree = await mux.tree();
+    expect(plainTree.workspaces.find(item => item.id === plain.id)).toMatchObject({ label: 'plain-workspace', cwd: fixture.dir });
+
+    const repo = join(fixture.dir, 'repo');
+    await mkdir(repo);
+    for (const args of [['git', 'init'], ['git', 'config', 'user.email', 'taut@example.test'], ['git', 'config', 'user.name', 'Taut'], ['git', 'commit', '--allow-empty', '-m', 'init']]) {
+      const child = Bun.spawn(args, { cwd: repo, stdout: 'pipe', stderr: 'pipe' });
+      expect(await child.exited).toBe(0);
+    }
+    const worktree = await mux.newWorkspace({ cwd: repo, branch: 'taut-wt', label: 'worktree-workspace' });
+    expect((await mux.tree()).workspaces.find(item => item.id === worktree.id)?.label).toBe('worktree-workspace');
+    expect(worktree.cwd).toBeTruthy();
+    expect((await stat(worktree.cwd!)).isDirectory()).toBe(true);
+    const listed = Bun.spawnSync(['git', 'worktree', 'list', '--porcelain'], { cwd: repo });
+    expect(listed.exitCode).toBe(0);
+    expect(listed.stdout.toString()).toContain(`worktree ${worktree.cwd}`);
+  });
+
+  test('rename updates workspace, tab, and pane labels', async () => {
+    const pane = await mux.newTab(workspaceId, { cwd: fixture.dir, label: 'rename-all' });
+    try {
+      await mux.rename({ workspaceId }, 'renamed-workspace');
+      await mux.rename({ tabId: pane.tabId }, 'renamed-tab');
+      await mux.rename({ paneId: pane.id }, 'renamed-pane-all');
+      const tree = await mux.tree();
+      expect(tree.workspaces.find(item => item.id === workspaceId)?.label).toBe('renamed-workspace');
+      expect(tree.tabs.find(item => item.id === pane.tabId)?.label).toBe('renamed-tab');
+      expect(tree.panes.find(item => item.id === pane.id)?.title).toBe('renamed-pane-all');
+    } finally { try { await mux.closePane(pane.id); } catch {} }
   });
 
   test('explain returns null for a shell', async () => {

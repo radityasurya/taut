@@ -64,8 +64,12 @@ export class HerdrMux implements Mux {
         revision: pane.revision ?? 0, ...sizes.get(pane.pane_id),
       };
     });
+    // ponytail: herdr workspace snapshots carry no cwd, so it is derived from the root pane
     return {
-      workspaces: (snap.workspaces ?? []).map((w: Json) => ({ id: w.workspace_id, label: w.label || w.workspace_id, ...(w.cwd ? { cwd: w.cwd } : {}) })),
+      workspaces: (snap.workspaces ?? []).map((w: Json) => {
+        const cwd = panes.find(p => p.workspaceId === w.workspace_id)?.cwd;
+        return { id: w.workspace_id, label: w.label || w.workspace_id, ...(cwd ? { cwd } : {}) };
+      }),
       tabs: (snap.tabs ?? []).map((t: Json) => ({ id: t.tab_id, workspaceId: t.workspace_id, label: t.label || t.tab_id })),
       panes,
     };
@@ -112,7 +116,18 @@ export class HerdrMux implements Mux {
   async newTab(workspaceId: string, o: { cwd?: string; label?: string; agent?: string }): Promise<Pane> {
     const result = await this.rpc('tab.create', { workspace_id: workspaceId, cwd: o.cwd, label: o.label, focus: false });
     const pane = result.root_pane;
-    if (o.agent) await this.rpc('agent.start', { name: o.agent, pane_id: pane.pane_id, timeout_ms: 30_000 });
+    if (o.agent) {
+      // ponytail: herdr agent names are unique per session and label-free; the Tab carries the label.
+      const name = `${o.agent}-${pane.pane_id}`.toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 32);
+      const params = { name, kind: o.agent, pane_id: pane.pane_id, timeout_ms: 30_000 };
+      try { await this.rpc('agent.start', params); }
+      catch (error) {
+        if (!(error instanceof Error) || !error.message.startsWith('agent_not_ready:')) throw error;
+        await Bun.sleep(1_000);
+        // ponytail: leave the Tab on agent failure; the user sees it and can close it. Retry from the sheet makes a new Tab.
+        await this.rpc('agent.start', params);
+      }
+    }
     return this.paneRecord(pane);
   }
 
@@ -120,7 +135,8 @@ export class HerdrMux implements Mux {
     const method = o.branch ? 'worktree.create' : 'workspace.create';
     const result = await this.rpc(method, { ...(o.branch ? { branch: o.branch } : {}), cwd: o.cwd, label: o.label, focus: false });
     const workspace = result.workspace ?? result;
-    return { id: workspace.workspace_id, label: workspace.label || o.label || workspace.workspace_id, ...(workspace.cwd ? { cwd: workspace.cwd } : {}) };
+    const cwd = workspace.cwd ?? result.root_pane?.cwd ?? o.cwd;
+    return { id: workspace.workspace_id, label: workspace.label || o.label || workspace.workspace_id, ...(cwd ? { cwd } : {}) };
   }
 
   async rename(target: { workspaceId: string } | { tabId: string } | { paneId: string }, label: string): Promise<void> {

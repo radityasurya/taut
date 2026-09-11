@@ -3,7 +3,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import os from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseAnsi } from '../shared/ansi.ts';
-import type { Explain, InputBody, Mux, PushSubscriptionBody, Screen, ScreenEvent, ScreenMode, Settings, State, StatePane, Tree } from '../shared/types.ts';
+import type { Explain, InputBody, Mux, NewTabBody, NewTabResult, NewWorkspaceBody, NewWorkspaceResult, PushSubscriptionBody, RenameBody, Screen, ScreenEvent, ScreenMode, Settings, State, StatePane, Tree } from '../shared/types.ts';
 import { sendPush, type VapidKeys } from './push.ts';
 import { configureSuggest, type SuggestAdapter } from './suggest.ts';
 
@@ -194,6 +194,48 @@ export class Hub {
   async state(): Promise<State> {
     await Promise.all([...this.entries.keys()].map(key => this.entries.get(key)!.tree ? undefined : this.refresh(key)));
     return this.cached ?? this.recompute();
+  }
+
+  async newTab(muxKey: string, body: NewTabBody): Promise<NewTabResult> {
+    const entry = this.entries.get(muxKey);
+    if (!entry) throw new Error('mux not found');
+    if (!entry.tree?.workspaces.some(w => w.id === body.workspaceId)) throw new Error('workspace not found');
+    const pane = await entry.mux.newTab(body.workspaceId, body);
+    await this.refreshAfterWrite(muxKey);
+    return { paneKey: `${muxKey}/${pane.id}` };
+  }
+
+  async newWorkspace(muxKey: string, body: NewWorkspaceBody): Promise<NewWorkspaceResult> {
+    const entry = this.entries.get(muxKey);
+    if (!entry) throw new Error('mux not found');
+    const workspace = await entry.mux.newWorkspace(body);
+    await this.refreshAfterWrite(muxKey);
+    return { workspaceKey: `${muxKey}/${workspace.id}` };
+  }
+
+  async rename(body: RenameBody): Promise<void> {
+    const entry = this.entries.get(body.muxKey);
+    if (!entry) throw new Error('mux not found');
+    const target = 'workspaceId' in body ? { workspaceId: body.workspaceId }
+      : 'tabId' in body ? { tabId: body.tabId } : { paneId: body.paneId };
+    if ('workspaceId' in target && !entry.tree?.workspaces.some(w => w.id === target.workspaceId)) throw new Error('workspace not found');
+    if ('tabId' in target && !entry.tree?.tabs.some(t => t.id === target.tabId)) throw new Error('tab not found');
+    if ('paneId' in target && !entry.tree?.panes.some(p => p.id === target.paneId)) throw new Error('pane not found');
+    await entry.mux.rename(target, body.label);
+    await this.refreshAfterWrite(body.muxKey);
+  }
+
+  async closePane(paneKey: string): Promise<void> {
+    await this.state();
+    const found = this.resolve(paneKey);
+    if (!found) throw new Error('pane not found');
+    await found.entry.mux.closePane(found.paneId);
+    await this.refreshAfterWrite(found.muxKey);
+  }
+
+  // ponytail: the write already happened; a failed receipt must not trigger a duplicate Retry.
+  private async refreshAfterWrite(muxKey: string): Promise<void> {
+    try { await this.refresh(muxKey); } catch (error) { console.warn(`taut: refresh after write failed for ${muxKey}`, error); }
   }
 
   private resolve(paneKey: string): { muxKey: string; paneId: string; entry: Entry } | undefined {

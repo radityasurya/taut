@@ -2,8 +2,8 @@
 // Nothing imports this in production: `installMock()` is a no-op unless the page is
 // opened with `?mock` (or built with VITE_MOCK=1).
 import type {
-  Explain, InputBody, Screen, ScreenEvent, ScreenMode, SeenBody, Settings, State, StatePane, Status,
-  SuggestSettingBody,
+  Explain, InputBody, NewTabBody, NewWorkspaceBody, RenameBody, Screen, ScreenEvent, ScreenMode, SeenBody, Settings,
+  State, StatePane, Status, SuggestSettingBody,
 } from '../shared/types.ts';
 
 // ---- fixtures ----
@@ -436,6 +436,100 @@ const DRAFTS = ['Continue', 'Show me the diff', 'Stop and explain'];
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const noContent = () => new Response(null, { status: 204 });
 
+// ---- writes ----
+// The four phase 7 routes, answered with the same status codes and key formats the Hub
+// sends, so the sheets can be driven end to end with no herdr.
+
+// Starts past the fixture ids (t1…t5, p1…p7), so a created id never collides with one.
+let counter = 100;
+const fresh = (prefix: string) => `${prefix}${(counter += 1)}`;
+
+/** A Workspace, Tab or Pane named `fail` fails: the one way to reach the sheet's error line. */
+const FAIL = 'fail';
+
+/** tmux cannot create, rename or close, exactly as `server/tmux.ts` says. */
+function writableMux(s: Store, muxKey: string): Response | undefined {
+  const mux = s.state.muxes.find((m) => m.key === muxKey);
+  if (!mux) return json({ error: 'mux not found' }, 404);
+  if (mux.kind !== 'herdr') return json({ error: 'unsupported' }, 501);
+  return undefined;
+}
+
+/** 80 characters is the Hub's limit; an empty name is a 400 too. */
+const badLabel = (label?: string) => label !== undefined && (label.length === 0 || label.length > 80);
+
+/** One Tab with one Pane, plus the Screen that Pane needs, the way herdr makes them. */
+function addTab(s: Store, muxKey: string, workspaceId: string, o: NewTabBody): StatePane {
+  const tabId = fresh('t');
+  s.state.tabs.push({ key: `${muxKey}/${tabId}`, muxKey, workspaceId, id: tabId, label: o.label ?? o.agent ?? 'shell' });
+  const id = fresh('p');
+  const pane: StatePane = {
+    key: `${muxKey}/${id}`, muxKey, workspaceId, tabId, id,
+    // herdr gives the label to the Tab; the Pane keeps the terminal's own title, which
+    // starts as the directory. Verified against a throwaway herdr.
+    title: basename(o.cwd), cwd: o.cwd, agent: o.agent,
+    status: o.agent ? 'working' : 'idle', revision: 1, seenRevision: 0,
+    cols: 80, rows: 24, statusChangedAt: Date.now(),
+    lastLine: o.agent ? `${o.agent} starting…` : undefined,
+  };
+  s.state.panes.push(pane);
+  s.screens[pane.key] = pair(1, genericScreen(pane), strip(genericScreen(pane)));
+  return pane;
+}
+
+/** ponytail: no `cwd` check here. The fixtures carry `~/projects/…`, which the Hub's own
+ *  "must be absolute" rule would reject, and the sheets default to what State gave them. */
+function write(s: Store, url: URL, method: string, body: unknown): Response | undefined {
+  if (method !== 'POST') return undefined;
+
+  const mux = url.pathname.match(/^\/api\/muxes\/([^/]+)\/(tabs|workspaces)$/);
+  if (mux) {
+    const muxKey = decodeURIComponent(mux[1]!);
+    const bad = writableMux(s, muxKey);
+    if (bad) return bad;
+
+    if (mux[2] === 'tabs') {
+      const o = (body ?? {}) as NewTabBody;
+      if (badLabel(o.label)) return json({ error: 'label' }, 400);
+      if (o.label === FAIL) return json({ error: 'agent_not_ready' }, 502);
+      const ws = s.state.workspaces.find((w) => w.muxKey === muxKey && w.id === o.workspaceId);
+      if (!ws) return json({ error: 'workspace not found' }, 404);
+      const pane = addTab(s, muxKey, ws.id, { ...o, cwd: o.cwd ?? ws.cwd });
+      for (const es of sources) es.push(s, { state: true });
+      return json({ paneKey: pane.key }, 201);
+    }
+
+    const o = (body ?? {}) as NewWorkspaceBody;
+    if (badLabel(o.label)) return json({ error: 'label' }, 400);
+    if (o.label === FAIL || o.branch === FAIL) return json({ error: 'agent_not_ready' }, 502);
+    const id = fresh('w');
+    // A worktree lives beside its directory, named after the branch, and says so.
+    const cwd = o.branch ? `${o.cwd ?? '~'}-${o.branch.replace(/\//g, '-')}` : o.cwd;
+    const label = o.label ?? [basename(o.cwd), o.branch].filter(Boolean).join(' · ');
+    s.state.workspaces.push({ key: `${muxKey}/${id}`, muxKey, id, label, cwd });
+    addTab(s, muxKey, id, { workspaceId: id, cwd });
+    for (const es of sources) es.push(s, { state: true });
+    return json({ workspaceKey: `${muxKey}/${id}` }, 201);
+  }
+
+  if (url.pathname !== '/api/rename') return undefined;
+  const o = (body ?? {}) as RenameBody & { workspaceId?: string; tabId?: string; paneId?: string };
+  const bad = writableMux(s, o.muxKey ?? '');
+  if (bad) return bad;
+  if (badLabel(o.label) || o.label === undefined) return json({ error: 'label' }, 400);
+  if (o.label === FAIL) return json({ error: 'agent_not_ready' }, 502);
+  const pane = s.state.panes.find((p) => p.muxKey === o.muxKey && p.id === o.paneId);
+  const target =
+    s.state.workspaces.find((w) => w.muxKey === o.muxKey && w.id === o.workspaceId) ??
+    s.state.tabs.find((t) => t.muxKey === o.muxKey && t.id === o.tabId) ??
+    pane;
+  if (!target) return json({ error: 'not found' }, 404);
+  if (pane && target === pane) pane.title = o.label;
+  else (target as { label: string }).label = o.label;
+  for (const es of sources) es.push(s, { state: true });
+  return noContent();
+}
+
 async function readBody(input: RequestInfo | URL, init?: RequestInit): Promise<unknown> {
   try {
     if (init?.body) return JSON.parse(String(init.body));
@@ -467,7 +561,10 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
     return noContent();
   }
 
-  const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain|attach|suggest)$/);
+  const wrote = write(s, url, method, body);
+  if (wrote) return wrote;
+
+  const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain|attach|suggest|close)$/);
   if (!match) return undefined;
   let key: string;
   try { key = decodeURIComponent(match[1]!); } catch { return json({ error: 'bad pane key' }, 400); }
@@ -500,6 +597,17 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
       for (const es of sources) es.push(s, { state: true });
     }
     return json(pane);
+  }
+  if (method === 'POST' && match[2] === 'close') {
+    const bad = writableMux(s, pane.muxKey);
+    if (bad) return bad;
+    s.state.panes = s.state.panes.filter((p) => p !== pane);
+    delete s.screens[key];
+    // A Tab with no Panes left goes with it, the way a Mux drops an empty Tab.
+    if (!s.state.panes.some((p) => p.muxKey === pane.muxKey && p.tabId === pane.tabId))
+      s.state.tabs = s.state.tabs.filter((t) => !(t.muxKey === pane.muxKey && t.id === pane.tabId));
+    for (const es of sources) es.push(s, { state: true });
+    return noContent();
   }
   if (method === 'POST' && match[2] === 'seen') {
     pane.seenRevision = (body as SeenBody | undefined)?.revision ?? pane.revision;

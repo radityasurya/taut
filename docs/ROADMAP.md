@@ -156,9 +156,12 @@ Verify: tmux Panes show Status `unknown`; read and send work.
 
 ## Phase 7 — write operations (herdr)
 
-- [ ] New Tab + start Agent; new Workspace / worktree; rename; close Pane
+- [x] New Tab + start Agent; new Workspace / worktree; rename; close Pane
 
 Verify: start `claude` in a new Tab from the phone.
+Evidence: `bun test` 48 pass, 0 fail (contract tests on a throwaway herdr, Agent start with
+the real `claude` binary; `test/write.test.ts` covers 201/204/400/404/501/502), plus phone
+screenshots of all four flows against a throwaway Hub on 7715.
 
 ## Phase 8 — diff review
 

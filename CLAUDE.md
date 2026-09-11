@@ -43,6 +43,26 @@ behind the two irreversible choices live in `docs/adr/`.
 - Chromium hands a horizontal touch drag to the nearest scroller and fires `pointercancel`,
   so `pointerup` never arrives. A swipe gesture must be built on `touchend`, not pointer
   events; the Tab strip swipe was mouse-only until this was found.
+- herdr's Workspace snapshot never carries `cwd` — only `workspace_id`, `number`, `label`,
+  `focused`, `pane_count`, `tab_count`, `active_tab_id`, `agent_status`. Only Panes carry
+  `cwd`, so `tree()` derives a Workspace's `cwd` from its first Pane, and `newWorkspace`
+  falls back to the root pane from the create result.
+- `agent.start` requires `kind` (the agent id: `claude`, `pi`, `codex`) alongside `name`;
+  `name` is only the display label, and omitting `kind` is a schema error. The adapter
+  retries once after 1 s on `agent_not_ready`, then rethrows and leaves the new Tab in
+  place — the user sees it and can close it, and Retry from the sheet makes a new Tab.
+- `worktree.create` needs only `{cwd, branch, label, focus: false}` — no `base`, `path`, or
+  `workspace_id`. The branch may be new; herdr picks the worktree path itself and returns it
+  as the root pane's `cwd`. `cwd` here is the source repo, not the worktree destination.
+- The Hub's write routes (`/api/muxes/:key/tabs`, `/api/muxes/:key/workspaces`,
+  `/api/rename`, `/api/panes/:key/close`) all await a tree refresh before replying, so the
+  next `state` SSE event already reflects the write. A herdr error code is the text before
+  the first `: ` in the Error message and surfaces as `502 {error: code}`; `Error('unsupported')`
+  is `501`.
+- Write tests run only on throwaway servers from `test/harness.ts`; the live socket at
+  `~/.config/herdr/herdr.sock` must never receive a write. For a manual check, start the Hub
+  with `TAUT_PORT=7715 HERDR_SOCKET_PATH=<tmp>/h.sock` — never a Vite dev server proxying to
+  7700.
 
 ## Conventions
 

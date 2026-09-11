@@ -69,6 +69,17 @@ export interface ScreenEvent extends Screen { key: string }
 export interface InputBody { text?: string; keys?: string[] }
 /** POST /api/panes/:key/seen */
 export interface SeenBody { revision: number }
+// Phase 7 write routes. Keys: muxKey = `${hostId}/${muxId}`; paneKey = `${muxKey}/${paneId}`;
+// workspaceKey = `${muxKey}/${workspaceId}`. Encode a key with encodeURIComponent in a path.
+/** POST /api/muxes/:key/tabs → 201 NewTabResult */
+export interface NewTabBody { workspaceId: string; cwd?: string; label?: string; agent?: string }
+export interface NewTabResult { paneKey: string }
+/** POST /api/muxes/:key/workspaces → 201 NewWorkspaceResult; branch set → git worktree */
+export interface NewWorkspaceBody { cwd?: string; label?: string; branch?: string }
+export interface NewWorkspaceResult { workspaceKey: string }
+/** POST /api/rename → 204; exactly one of workspaceId | tabId | paneId */
+export type RenameBody = { muxKey: string; label: string } & ({ workspaceId: string } | { tabId: string } | { paneId: string });
+/** POST /api/panes/:key/close → 204. Errors on all four: `{ error: string }` — 400 body, 403 origin, 404 unknown, 501 'unsupported', 502 herdr error code. */
 /** POST /api/panes/:key/attach */
 export interface AttachResult { path: string; bytes: number; display: string }
 /** POST /api/push/subscribe */

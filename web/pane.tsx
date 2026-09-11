@@ -1,10 +1,12 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { parseAnsi } from '../shared/ansi.ts';
-import type { Explain, InputBody, ScreenEvent, SeenBody, Span, State, StatePane, Status } from '../shared/types.ts';
-import { haptic, navigate, opensWith, post } from './app.tsx';
+import type {
+  Explain, InputBody, NewTabBody, NewTabResult, RenameBody, ScreenEvent, SeenBody, Span, State, StatePane, Status,
+} from '../shared/types.ts';
+import { api, haptic, navigate, opensWith, post } from './app.tsx';
 import { Blocked } from './blocked.tsx';
-import { Dot, markSeen, statusText } from './home.tsx';
+import { commonAgent, Dot, markSeen, statusText } from './home.tsx';
 import { Attach, Back, Down, Mic, More, Plus, Send, Speaker, Switch2 } from './icons.tsx';
 import { ConfirmCloseSheet, MenuSheet, NewTabSheet, RenameSheet } from './sheets.tsx';
 import { SwitchDrawer } from './switch.tsx';
@@ -120,7 +122,10 @@ interface Recognition {
 export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state: State | null; screen: ScreenEvent | null }) {
   const pane = state?.panes.find((p) => p.key === paneKey);
   const ws = state?.workspaces.find((w) => w.muxKey === pane?.muxKey && w.id === pane?.workspaceId);
-  const host = state?.hosts.find((h) => h.id === state.muxes.find((m) => m.key === pane?.muxKey)?.hostId);
+  const mux = state?.muxes.find((m) => m.key === pane?.muxKey);
+  const host = state?.hosts.find((h) => h.id === mux?.hostId);
+  /** Only herdr writes. tmux answers 501, so New Tab, Rename and Close are not offered. */
+  const writable = mux?.kind === 'herdr';
   const lines = useMemo(() => (screen ? parseAnsi(screen.text) : []), [screen]);
 
   // Wrap is the default reading mode for an agent and never for a shell, where the columns
@@ -509,14 +514,16 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
             style={{ width: underline.w, transform: `translateX(${underline.x}px)` }}
           />
         </div>
-        <button
-          type="button"
-          aria-label="New Tab"
-          onClick={() => setShowNewTab(true)}
-          className="mr-1.5 flex size-9 shrink-0 items-center justify-center text-accent"
-        >
-          <Plus />
-        </button>
+        {writable && (
+          <button
+            type="button"
+            aria-label="New Tab"
+            onClick={() => setShowNewTab(true)}
+            className="mr-1.5 flex size-9 shrink-0 items-center justify-center text-accent"
+          >
+            <Plus />
+          </button>
+        )}
         <button
           type="button"
           aria-pressed={fit}
@@ -811,8 +818,12 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
         onClose={() => setShowMore(false)}
         items={[
           { label: wrap ? 'Wrap: on' : 'Wrap: off', onClick: () => setWrap(!wrap) },
-          { label: 'Rename', onClick: () => setRename(true) },
-          { label: 'Close Pane', danger: true, onClick: () => setConfirmClose(true) },
+          ...(writable
+            ? [
+                { label: 'Rename', onClick: () => setRename(true) },
+                { label: 'Close Pane', danger: true, onClick: () => setConfirmClose(true) },
+              ]
+            : []),
           { label: 'Resize to phone', hint: 'v2', disabled: true },
         ]}
       />
@@ -820,19 +831,38 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
         open={showNewTab}
         onClose={() => setShowNewTab(false)}
         cwd={ws?.cwd}
+        agent={commonAgent(state?.panes.filter((p) => p.muxKey === pane?.muxKey && p.workspaceId === pane?.workspaceId) ?? [])}
         where={
           <>
             in <span className="text-fg">{ws?.label}</span> · {host?.label}
           </>
         }
-        onSubmit={noop}
+        onSubmit={async (o) => {
+          const { paneKey: created } = await api<NewTabResult>(
+            `/api/muxes/${encodeURIComponent(pane!.muxKey)}/tabs`,
+            { workspaceId: pane!.workspaceId, ...o } satisfies NewTabBody,
+          );
+          navigate(`#/pane/${encodeURIComponent(created)}`);
+        }}
       />
-      <RenameSheet open={rename} kind="Pane" current={pane?.title ?? ''} onClose={() => setRename(false)} onSubmit={noop} />
-      <ConfirmCloseSheet open={confirmClose} title={pane?.title ?? ''} onClose={() => setConfirmClose(false)} onConfirm={noop} />
+      <RenameSheet
+        open={rename}
+        kind="Pane"
+        current={pane?.title ?? ''}
+        onClose={() => setRename(false)}
+        onSubmit={(label) =>
+          api<void>('/api/rename', { muxKey: pane!.muxKey, paneId: pane!.id, label } satisfies RenameBody)
+        }
+      />
+      <ConfirmCloseSheet
+        open={confirmClose}
+        title={pane?.title ?? ''}
+        onClose={() => setConfirmClose(false)}
+        onConfirm={async () => {
+          await api<void>(`/api/panes/${encodeURIComponent(paneKey)}/close`);
+          navigate('#/');
+        }}
+      />
     </div>
   );
 }
-
-// ponytail: rename, close and tab creation reach herdr in phase 7; the live Mux is
-// read-only today, so these drawers close and change nothing.
-const noop = () => {};

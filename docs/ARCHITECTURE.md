@@ -166,7 +166,10 @@ capability flags: the UI hides write actions when `kind === 'tmux'`.
 | `POST /api/panes/:key/seen` `{revision}` | mark Seen |
 | `GET /api/panes/:key/explain` | Explain or null |
 | `POST /api/panes/:key/attach` (raw body, `X-Name: <filename>`) | write the file on the Pane's Host → `{path, bytes, display}`; 413 over `TAUT_MAX_ATTACHMENT_MB` |
-| `POST /api/panes/:key/close`, `/api/muxes/:key/tabs`, `/api/muxes/:key/workspaces`, `/api/rename` | phase 7 |
+| `POST /api/muxes/:key/tabs` `{workspaceId, cwd?, label?, agent?}` | new Tab with one Pane, agent started when asked → 201 `{paneKey}` |
+| `POST /api/muxes/:key/workspaces` `{cwd?, label?, branch?}` | new Workspace; `branch` makes it a git worktree → 201 `{workspaceKey}` |
+| `POST /api/rename` `{muxKey, label, workspaceId\|tabId\|paneId}` | rename one of the three → 204 |
+| `POST /api/panes/:key/close` | close the Pane → 204 |
 | `GET /api/push/vapid` | the Hub's VAPID public key, base64url |
 | `POST /api/push/subscribe` (a `PushSubscription` as JSON) | store the subscription |
 | `DELETE /api/push/subscribe` `{endpoint}` | forget it |
@@ -174,6 +177,12 @@ capability flags: the UI hides write actions when `kind === 'tmux'`.
 | `POST /api/settings/suggest` `{enabled}` | turn Smart replies on or off on the Hub; the Hub persists the flag |
 | `POST /api/panes/:key/suggest` | draft Smart replies for this Pane now → the StatePane; needs `TAUT_SUGGEST`; no-op while the Hub flag is off or a request for that revision is already in flight |
 | `PUT /api/settings` | phase 5 |
+
+The four write routes answer `{error}` with 400 (empty or over-80-character label, `cwd`
+not absolute), 403 (Origin), 404 (unknown Mux, Workspace or Pane), 501 `unsupported`
+(tmux cannot create, rename or close) and 502 with herdr's own error code, for example
+`agent_not_ready`. The Hub refreshes State after a write, so the SSE `state` event is the
+receipt.
 
 The Hub encrypts each payload itself (RFC 8291, aes128gcm) and signs the request (RFC
 8292, VAPID) with WebCrypto in `server/push.ts`; there is no `web-push` dependency. A push
