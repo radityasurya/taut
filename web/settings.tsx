@@ -1,3 +1,4 @@
+import { TopBar } from './header.tsx';
 import { useEffect, useState } from 'react';
 import { getTheme, setTheme, THEMES } from './app.tsx';
 import type { Theme } from './app.tsx';
@@ -59,9 +60,7 @@ export function Settings() {
 
   return (
     <div className="mx-auto max-w-2xl pt-[env(safe-area-inset-top)] pb-28">
-      <header className="flex h-11 items-center px-4">
-        <h1 className="text-title tracking-tight">Settings</h1>
-      </header>
+      <TopBar title="Settings" />
 
       <h2 className="label-caps px-4 pt-3.5 pb-2">Theme</h2>
       <div role="group" aria-label="Theme" className="hscroll flex gap-2 px-4 pb-1">

@@ -1,3 +1,4 @@
+import { TopBar } from './header.tsx';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import type { State, StateHost } from '../shared/types.ts';
@@ -78,10 +79,7 @@ export function Hosts({ state }: { state: State | null }) {
 
   return (
     <div className="mx-auto max-w-2xl pt-[env(safe-area-inset-top)] pb-28">
-      <header className="flex h-11 items-center justify-between px-4">
-        <h1 className="text-title tracking-tight">Hosts</h1>
-        {hub && <span className="text-caption text-muted">hub · {hub.label}</span>}
-      </header>
+      <TopBar title="Hosts" right={hub && <span className="text-caption text-muted">hub · {hub.label}</span>} />
 
       <ul className="flex flex-col gap-3 px-4 pt-2">
         {state?.hosts.map((h) => (

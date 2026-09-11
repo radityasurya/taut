@@ -1,3 +1,4 @@
+import { TopBar } from './header.tsx';
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { State, StatePane, StateWorkspace, Status } from '../shared/types.ts';
@@ -220,9 +221,10 @@ export function Home({ state }: { state: State | null }) {
 
   return (
     <div className="mx-auto max-w-2xl pt-[env(safe-area-inset-top)] pb-28">
-      <header className="flex h-11 items-center justify-between px-4">
-        <h1 className="text-title tracking-tight">taut</h1>
-        <div className="flex items-center gap-1">
+      <TopBar
+        title="taut"
+        right={
+          <>
           <span className="mr-1.5 text-caption tabular-nums text-muted">{counts}</span>
           <button
             type="button"
@@ -232,8 +234,10 @@ export function Home({ state }: { state: State | null }) {
           >
             <Plus size={22} />
           </button>
-        </div>
-      </header>
+        
+          </>
+        }
+      />
 
       {state && state.hosts.length > 1 && (
         <div role="group" aria-label="Filter by Host" className="hscroll flex gap-2 px-4 pt-1.5 pb-0.5">
