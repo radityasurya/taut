@@ -39,7 +39,7 @@ function DrawerContent({ className, children, ...props }: React.ComponentProps<t
       <DrawerPrimitive.Content
         data-slot="drawer-content"
         className={cn(
-          'fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto max-h-[85dvh] flex-col focus:outline-none',
+          'fixed inset-x-0 bottom-0 z-50 mx-auto mt-24 flex h-auto w-full max-w-[420px] flex-col focus:outline-none',
           'rounded-t-drawer bg-elevated text-fg shadow-elevated',
           'pb-[max(env(safe-area-inset-bottom),12px)]',
           className,
