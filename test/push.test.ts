@@ -83,6 +83,14 @@ describe.skipIf(!canListen)('web push', () => {
     expect(request.headers.get('content-encoding')).toBe('aes128gcm');
     expect(request.headers.get('ttl')).toBe('3600'); expect(request.headers.get('urgency')).toBe('high');
     expect(request.headers.get('authorization')).toMatch(/^vapid t=.+, k=.+$/i);
+    // Apple's push service answers 403 BadJwtToken for a `mailto:` subject without a real domain;
+    // the contact must be an https URL or a routable mailbox.
+    {
+      const token = String(request.headers.get('authorization')).match(/t=([^,]+)/)![1]!;
+      const claims = JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString());
+      expect(claims.sub).toMatch(/^https:\/\/[^/]+\.[a-z]+|^mailto:[^@]+@[^@]+\.[a-z]+$/);
+      expect(typeof claims.aud).toBe('string'); expect(claims.aud.startsWith('http')).toBe(true);
+    }
     status = 'working'; changed?.('all'); await Bun.sleep(250);
     status = 'done'; changed?.('all'); await Bun.sleep(300);
     expect(received).toHaveLength(1);

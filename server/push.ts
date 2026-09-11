@@ -39,7 +39,7 @@ export async function sendPush(
 
   const now = Math.floor(Date.now() / 1000);
   const jwtHeader = b64(text(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
-  const jwtPayload = b64(text(JSON.stringify({ aud: endpoint.origin, exp: now + 12 * 60 * 60, sub: 'mailto:taut@localhost' })));
+  const jwtPayload = b64(text(JSON.stringify({ aud: endpoint.origin, exp: now + 12 * 60 * 60, sub: 'https://github.com/radityasurya/taut' })));
   const rawPublic = bytes(vapid.publicKey);
   const privateKey = await crypto.subtle.importKey('jwk', {
     kty: 'EC', crv: 'P-256', x: b64(rawPublic.slice(1, 33)), y: b64(rawPublic.slice(33)), d: vapid.privateKey,
