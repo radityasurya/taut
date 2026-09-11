@@ -261,7 +261,7 @@ export function App() {
 }
 
 /** POST helper. The browser sets Origin for us, which is what the Hub checks. */
-export function post(paneKey: string, path: 'input' | 'seen', body: unknown) {
+export function post(paneKey: string, path: 'input' | 'seen' | 'suggest', body: unknown) {
   return fetch(`/api/panes/${encodeURIComponent(paneKey)}/${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

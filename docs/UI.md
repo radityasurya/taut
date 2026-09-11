@@ -83,18 +83,38 @@ Switch, Read aloud (Agent Panes only) and More. Under it, the **Tab strip**
 lists that Workspace's Tabs, each with a 6 px Dot rolled up from its Panes,
 then `+` for New Tab, then the grid chip at the right end (`80×24`, or
 `80×24 · fit` when pressed). Fit scales the `<pre>` to the room the scroller
-leaves after its own left padding. A horizontal **touch** swipe on the strip
-moves between Tabs: Chromium gives a horizontal drag to the nearest scroller
-and fires `pointercancel`, so the gesture reads `touchend`, and it is ignored
-when the strip itself scrolled, which is what a drag means once there are more
-Tabs than fit. One accent underline slides between the Tabs. When the open Tab
-holds several Panes, a chip row lists them.
+leaves after its own padding, and is **off** until you press it. A horizontal
+**touch** swipe on the strip moves between Tabs: Chromium gives a horizontal
+drag to the nearest scroller and fires `pointercancel`, so the gesture reads
+`touchend`, and it is ignored when the strip itself scrolled, which is what a
+drag means once there are more Tabs than fit. One accent underline slides
+between the Tabs. When the open Tab holds several Panes, a chip row lists them.
 
 The grid renders the `visible` screen as styled ANSI spans, pinned to the
 bottom until you scroll up, when a **New output** pill appears. Content wider
 than the phone fades at the right edge instead of showing a scrollbar. There is
 no Screen/Recent switch: taut only ever shows the visible grid, and Wrap (in
 More) reflows it client-side.
+
+**Width.** From `lg` up the Pane column is the whole window (`max-w-none`), so
+the grid keeps its own width: the `<pre>` is sized by its content and centred,
+and nothing is scaled while it fits. A 120-column grid is 867 px at 12 px, so a
+desktop shows it whole and Fit stays for the phone, where the window is
+narrower than the grid. The dock surface and the blocked card still cap their
+contents at the reading column, so a 1600 px window does not stretch a button.
+
+Wrap reflows the same text to the column, never wider than the Pane's own
+`cols`. It needs `w-full`: `w-max` is `max-content`, which never wraps.
+
+| Setting | Default | Key |
+|---|---|---|
+| Fit | off | `taut.fit` = `on` \| `off` |
+| Wrap, agent Panes | on | `taut.wrap.agent` = `on` \| `off` |
+| Wrap, shell Panes | off | `taut.wrap.shell` = `on` \| `off` |
+| Smart replies | off | `taut.smart` = `on` \| `off` |
+
+Wrap is remembered per kind, not per Pane: agent output is prose and wants
+reflowing, a shell Pane is htop and logs, where the columns are the layout.
 
 When Status is `blocked`, `web/blocked.tsx` draws a card above the dock: the
 detection's first line as a heading, the rule id, up to two excerpt lines in
@@ -110,13 +130,41 @@ duplicates, because the footer's `esc to cancel` and `enter to confirm` are the
 preset under another name. The id alone is not enough: a real Claude Code
 permission box matches `live_blocked_form`, never `bash_permission_prompt`.
 
-The dock is the only place with input: a horizontally scrolling key bar (a
-longer set for shell Panes), and — for Agent Panes only — the composer, with
-dictation into the field, an attach button, and Send. Enter sends; Shift+Enter
-inserts a newline. The mic replaces Send only while the field is empty **and**
-the browser has `webkitSpeechRecognition`; with no engine the disabled Send
-button keeps its place rather than offering a mic that does nothing. A
-transcript lands in the field for review and is never sent on its own.
+The dock is the only place with input. Agent Panes stack **quick-reply pills ·
+composer · key bar**; shell Panes have the key bar alone (a longer set). The key
+bar comes last because on a phone it then rides directly above the keyboard,
+like an accessory row, with the composer it types into just over it.
+
+**Quick replies** (`web/replies.ts`, a pure function; `web/pane.tsx` renders
+them) scroll horizontally in one row, 8 px radius, 13 px:
+
+| Pill | Looks like | A tap |
+|---|---|---|
+| Key, primary | accent fill, the key glyph at 11 px mono, 70 % opacity | sends the key at once |
+| Key, secondary | `--bg`, hairline border, the glyph in `--muted` | sends the key at once |
+| Generated text | `--bg`, hairline border, `✦` in accent, label in `--fg` | fills the composer |
+| Static text | `--bg`, hairline border, label in `--muted` | fills the composer |
+
+The order is: the keys `shared/blocked.ts` offers for the blocked prompt
+(`Yes ↵`, `No esc`, then the Mux's own hint keys), plus `↑` `↓` when the
+detection shows two or more numbered options; then up to three drafts from
+`StatePane.suggestions`; then the static set for the Agent — Claude Code gets
+Continue · Run the tests · Commit and push · Explain the diff · Stop here, Pi
+gets Continue · Run the tests · Show me the plan, any other Agent gets
+Continue. A draft that repeats a static reply is listed once, as the draft.
+
+A text pill is a draft, not an answer: it lands in the composer for review and
+never sends, appended after what you have already typed, like dictation. Drafts
+appear only while **Smart replies** is on (`taut.smart`); a blocked Pane with no
+drafts for the current revision asks the Hub for one, once, with
+`POST /api/panes/:key/suggest`.
+
+The composer has dictation into the field, an attach button, and Send. Enter
+sends; Shift+Enter inserts a newline. The mic replaces Send only while the
+field is empty **and** the browser has `webkitSpeechRecognition`; with no
+engine the disabled Send button keeps its place rather than offering a mic that
+does nothing. A transcript lands in the field for review and is never sent on
+its own.
 
 Attach opens the photo library, never the camera: the hidden input has
 `accept="image/*,video/*"`, `multiple`, and no `capture`. Each file goes out on
@@ -158,8 +206,20 @@ a dashed **Add Host** button that opens the Add Host sheet.
 
 Theme chips (System plus six themes, each with its own `--bg` as the swatch;
 the current one scrolls itself into view), a push toggle, a Haptics toggle on
-Android only, the iOS install hint, and read-only Access rows for the trusted
-login and what serves the app. Hosts live on their own tab, not here.
+Android only, the iOS install hint, a **Smart replies** toggle, and read-only
+Access rows for the trusted login and what serves the app. Hosts live on their
+own tab, not here.
+
+**Smart replies** reads `GET /api/settings`. With a provider configured the hint
+is `provider · model` (`zai · glm-5.2`); with none it reads `not configured ·
+set TAUT_SUGGEST on the Hub` and the switch is disabled, because there is
+nothing to turn on. The state is the **and** of both sides — the Hub's
+`suggest.enabled` and this phone's `taut.smart` — and the switch writes both:
+`localStorage` for the pills, `POST /api/settings/suggest {enabled}` for the
+drafting. One rule, so a phone that turned it off never shows drafts and a Hub
+that never drafts cannot be switched on from one phone only. Under the row, one
+muted line says what leaves the Hub; the detail is in
+[SECURITY.md](./SECURITY.md).
 
 The push toggle is the only control with a failure state, so it has five:
 

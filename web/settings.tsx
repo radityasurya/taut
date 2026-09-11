@@ -4,6 +4,7 @@ import { getTheme, setTheme, THEMES } from './app.tsx';
 import type { Theme } from './app.tsx';
 import { InstallHint, Toggle } from './hosts.tsx';
 import { disablePush, enablePush, pushOn } from './push.ts';
+import type { Settings as HubSettings, SuggestSettingBody } from '../shared/types.ts';
 
 const LABELS: Record<Theme, string> = {
   system: 'System',
@@ -26,37 +27,29 @@ const SWATCH: Record<Theme, string | null> = {
   mocha: '#1e1e2e',
 };
 
-interface Prefs {
-  trustedUser?: string;
-  servedBy?: string;
-}
-
 const android = /Android/.test(navigator.userAgent);
 
 export function Settings() {
   const [theme, choose] = useState(getTheme);
-  const [prefs, setPrefs] = useState<Prefs>({});
+  const [prefs, setPrefs] = useState<HubSettings>({ suggest: { enabled: false } });
   const [haptics, setHaptics] = useState(() => localStorage.getItem('taut.haptics') !== 'off');
   // Push state is the browser's, not the Hub's: the intent in localStorage plus a live
   // permission. `/api/settings` has no push field to read.
   const [push, setPush] = useState(pushOn);
   const [pushNote, setPushNote] = useState('');
+  // Smart replies live in two places: the Hub decides whether to draft at all, this phone
+  // decides whether to show the drafts. On means both, and the switch writes both.
+  const [smart, setSmart] = useState(() => localStorage.getItem('taut.smart') === 'on');
 
   useEffect(() => {
     fetch('/api/settings')
-      .then((r) => r.json() as Promise<Prefs>)
+      .then((r) => r.json() as Promise<HubSettings>)
       .then(setPrefs)
       .catch(() => {});
   }, []);
 
-  const save = (next: Prefs) => {
-    setPrefs({ ...prefs, ...next });
-    void fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(next),
-    }).catch(() => {});
-  };
+  const suggest = prefs.suggest ?? { enabled: false };
+  const provider = suggest.provider && [suggest.provider, suggest.model].filter(Boolean).join(' · ');
 
   return (
     <div className="mx-auto max-w-2xl pt-[env(safe-area-inset-top)] pb-28">
@@ -123,6 +116,30 @@ export function Settings() {
             }}
           />
         </>
+      )}
+
+      <h2 className="label-caps px-4 pt-6 pb-1">Replies</h2>
+      <Toggle
+        label="Smart replies"
+        hint={provider || 'not configured · set TAUT_SUGGEST on the Hub'}
+        checked={Boolean(provider) && suggest.enabled && smart}
+        disabled={!provider}
+        onChange={(v) => {
+          setSmart(v);
+          localStorage.setItem('taut.smart', v ? 'on' : 'off');
+          setPrefs({ ...prefs, suggest: { ...suggest, enabled: v } });
+          void fetch('/api/settings/suggest', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ enabled: v } satisfies SuggestSettingBody),
+          }).catch(() => {});
+        }}
+      />
+      {provider && (
+        <p className="px-4 pb-2 text-caption leading-relaxed text-muted">
+          When an agent blocks, the last lines of its Screen go to the provider, which drafts three replies.
+          The key stays on the Hub.
+        </p>
       )}
 
       <h2 className="label-caps px-4 pt-6 pb-1">Access</h2>

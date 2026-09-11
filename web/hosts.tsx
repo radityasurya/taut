@@ -155,15 +155,18 @@ export function Toggle({
   label,
   hint,
   checked,
+  disabled,
   onChange,
 }: {
   label: string;
   hint?: string;
   checked: boolean;
+  /** Nothing to switch on yet — the hint says what is missing. */
+  disabled?: boolean;
   onChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex min-h-12 items-center gap-3 px-4 py-2">
+    <div className={`flex min-h-12 items-center gap-3 px-4 py-2 ${disabled ? 'opacity-55' : ''}`}>
       <span className="min-w-0 flex-1">
         <span className="block text-body">{label}</span>
         {hint && <span className="mt-px block text-caption text-muted">{hint}</span>}
@@ -173,6 +176,7 @@ export function Toggle({
         role="switch"
         aria-checked={checked}
         aria-label={label}
+        disabled={disabled}
         onClick={() => onChange(!checked)}
         className={`h-6.5 w-11 shrink-0 rounded-full p-[3px] transition-colors ${checked ? 'bg-accent' : 'bg-border'}`}
       >

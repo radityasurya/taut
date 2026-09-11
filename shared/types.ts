@@ -58,6 +58,8 @@ export interface StatePane {
   lastLine?: string;
   /** ms epoch of the last Status change the Hub observed; first sight counts as a change */
   statusChangedAt?: number;
+  /** Smart replies drafted by the Hub for the latest Status change; agent Panes only, ≤ 3, absent when off */
+  suggestions?: string[];
 }
 /** GET /api/state and SSE `event: state` */
 export interface State { hosts: StateHost[]; muxes: StateMux[]; workspaces: StateWorkspace[]; tabs: StateTab[]; panes: StatePane[] }
@@ -74,6 +76,15 @@ export interface PushSubscriptionBody {
   endpoint: string; expirationTime?: number | null;
   keys: { p256dh: string; auth: string };
 }
+/** GET /api/settings */
+export interface Settings {
+  trustedUser?: string; servedBy?: string;
+  /** Smart replies: provider/model absent when the Hub has no TAUT_SUGGEST; enabled is the persisted Hub flag */
+  suggest: { provider?: string; model?: string; enabled: boolean };
+}
+/** POST /api/settings/suggest */
+export interface SuggestSettingBody { enabled: boolean }
+/** POST /api/panes/:key/suggest — forces a fresh Smart replies call; responds with the StatePane */
 
 // ---- ANSI spans (shared/ansi.ts) ----
 // fg/bg: a number 0..15 is a palette index (render as `var(--ansi-N)`);

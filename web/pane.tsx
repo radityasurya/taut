@@ -9,6 +9,7 @@ import { Attach, Back, Down, Mic, More, Plus, Send, Speaker, Switch2 } from './i
 import { ConfirmCloseSheet, MenuSheet, NewTabSheet, RenameSheet } from './sheets.tsx';
 import { SwitchDrawer } from './switch.tsx';
 import { AGENT_KEYS, SHELL_KEYS } from './keys.ts';
+import { quickReplies } from './replies.ts';
 
 const color = (c: number | string | undefined) => (typeof c === 'number' ? `var(--ansi-${c})` : c);
 
@@ -122,10 +123,22 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
   const host = state?.hosts.find((h) => h.id === state.muxes.find((m) => m.key === pane?.muxKey)?.hostId);
   const lines = useMemo(() => (screen ? parseAnsi(screen.text) : []), [screen]);
 
-  const [wrap, setWrap] = useState(false);
-  // Fit is on unless the user turned it off: the scale is min(1, …), so a grid that already
-  // fits is left alone and a wide one never scrolls sideways.
-  const [fit, setFitState] = useState(() => localStorage.getItem('taut.fit') !== 'off');
+  // Wrap is the default reading mode for an agent and never for a shell, where the columns
+  // are the layout (htop, logs). Remembered per kind, not per Pane.
+  const kind = pane?.agent ? 'agent' : 'shell';
+  const [wraps, setWraps] = useState(() => ({
+    agent: localStorage.getItem('taut.wrap.agent') === 'on',
+    shell: localStorage.getItem('taut.wrap.shell') === 'on',
+  }));
+  const wrap = wraps[kind];
+  const setWrap = (v: boolean) => {
+    localStorage.setItem(`taut.wrap.${kind}`, v ? 'on' : 'off');
+    setWraps((w) => ({ ...w, [kind]: v }));
+  };
+  // Fit is off until the user asks for it: the column grows to the grid's own width on a
+  // desktop, so scaling is a phone answer, not the default. The scale is min(1, …), so a
+  // grid that already fits is left alone even then.
+  const [fit, setFitState] = useState(() => localStorage.getItem('taut.fit') === 'on');
   const setFit = (v: boolean) => { localStorage.setItem('taut.fit', v ? 'on' : 'off'); setFitState(v); };
   const [scale, setScale] = useState(1);
   const [fade, setFade] = useState(false);
@@ -166,10 +179,11 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
   useEffect(() => {
     const el = pre.current;
     if (!el || !el.parentElement) return setScale(1);
-    // The scroller carries the grid's left padding, so the room the `<pre>` actually has is
+    // The scroller carries the grid's padding, so the room the `<pre>` actually has is
     // narrower than the scroller. Measuring against `clientWidth` alone left Fit on and the
     // last column still cut off.
-    const room = el.parentElement.clientWidth - parseFloat(getComputedStyle(el.parentElement).paddingLeft || '0');
+    const pad = getComputedStyle(el.parentElement);
+    const room = el.parentElement.clientWidth - parseFloat(pad.paddingLeft || '0') - parseFloat(pad.paddingRight || '0');
     setScale(fit ? Math.min(1, room / el.scrollWidth) : 1);
     measure();
   }, [fit, wrap, lines, viewportW]);
@@ -185,6 +199,20 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
   useEffect(() => {
     if (pane) lastPane.set(`${pane.muxKey}/${pane.tabId}`, pane.key);
   }, [pane?.key]);
+
+  // Smart replies are the phone's own switch; Settings writes it and tells the Hub too.
+  const [smart] = useState(() => localStorage.getItem('taut.smart') === 'on');
+
+  // The Hub drafts on a Status change, so a Pane that blocked before the switch went on
+  // has none. Ask once per revision; a Hub with Smart replies off answers with the Pane
+  // unchanged and nothing leaves it.
+  const asked = useRef('');
+  useEffect(() => {
+    const stamp = `${paneKey}@${pane?.revision}`;
+    if (!smart || !pane?.agent || pane.status !== 'blocked' || pane.suggestions?.length || asked.current === stamp) return;
+    asked.current = stamp;
+    void post(paneKey, 'suggest', {});
+  }, [smart, paneKey, pane?.agent, pane?.status, pane?.revision, pane?.suggestions?.length]);
 
   // The blocked card outlives the status by 150 ms, so it fades instead of vanishing.
   useEffect(() => {
@@ -250,6 +278,13 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
   const keys = (names: string[]) => {
     haptic();
     void post(paneKey, 'input', { keys: names } satisfies InputBody);
+  };
+
+  /** A text pill is a draft, not an answer: it lands in the composer for review. */
+  const fill = (reply: string) => {
+    haptic();
+    setText((t) => `${t}${t && !t.endsWith(' ') ? ' ' : ''}${reply}`);
+    input.current?.focus();
   };
 
   // ---- attachments ----
@@ -375,9 +410,12 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
   const canDictate = 'webkitSpeechRecognition' in window;
   const active = tabs.find((t) => t.id === pane?.tabId);
   const grid = pane?.cols && pane.rows ? `${pane.cols}×${pane.rows}` : 'fit';
+  const pills = agent ? quickReplies({ agent, explain, suggestions: pane?.suggestions, smart }) : [];
 
   return (
-    <div className="mx-auto flex h-dvh max-w-2xl flex-col pt-[env(safe-area-inset-top)] lg:max-w-4xl">
+    // On a desktop the column is the window: the grid keeps its own width, centred, rather
+    // than being scaled down to a phone column it does not need. See DESIGN.md.
+    <div className="mx-auto flex h-dvh max-w-2xl flex-col pt-[env(safe-area-inset-top)] lg:max-w-none">
       <header className="flex h-11 shrink-0 items-center gap-1 pr-2 pl-1">
         <a href="#/" aria-label="All panes" className="flex size-11 shrink-0 items-center justify-center text-accent">
           <Back />
@@ -523,7 +561,7 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
             if (pinned.current) setFresh(false);
             measure();
           }}
-          className="h-full overflow-auto pt-1 pb-2 pl-4"
+          className="h-full overflow-auto pt-1 pb-2 pl-4 lg:pr-4"
           style={
             fade
               ? {
@@ -535,8 +573,16 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
         >
           <pre
             ref={pre}
-            className={`w-max min-w-full font-mono text-caption ${wrap ? 'whitespace-pre-wrap' : 'whitespace-pre'}`}
-            style={scale < 1 ? { transform: `scale(${scale})`, transformOrigin: 'top left' } : undefined}
+            className={`font-mono text-caption lg:mx-auto ${
+              // Wrapped text takes the column; unwrapped text keeps the grid's own width.
+              // `w-max` would be max-content, which never wraps, so Wrap needs `w-full`.
+              wrap ? 'w-full break-words whitespace-pre-wrap' : 'w-max min-w-full whitespace-pre lg:min-w-0'
+            }`}
+            style={{
+              // Never reflow wider than the Pane itself: the agent wrote for `cols` columns.
+              maxWidth: wrap && pane?.cols ? `${pane.cols}ch` : undefined,
+              ...(scale < 1 ? { transform: `scale(${scale})`, transformOrigin: 'top left' } : null),
+            }}
           >
             {lines.map((spans, i) => (
               <Fragment key={i}>
@@ -569,150 +615,193 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
 
       {explain && (
         <div className={`transition-opacity duration-150 ${status === 'blocked' ? 'opacity-100' : 'opacity-0'}`}>
-          <Blocked explain={explain} onKeys={keys} />
+          <Blocked explain={explain} />
         </div>
       )}
 
       <div className="flex shrink-0 flex-col gap-2.5 rounded-t-drawer bg-elevated pt-3 pb-[max(env(safe-area-inset-bottom),12px)] shadow-[0_-8px_24px_rgb(0_0_0/0.25)]">
-        <div className="hscroll flex gap-2 px-4">
-          {(agent ? AGENT_KEYS : SHELL_KEYS).map(([name, label]) => (
-            <button
-              key={name}
-              type="button"
-              aria-label={name}
-              onClick={() => keys([name])}
-              className={`press flex h-9 shrink-0 items-center justify-center rounded-chip border border-border bg-bg px-3 font-mono text-caption active:bg-surface ${
-                name === 'ctrl+c' ? 'text-danger' : 'text-fg'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {agent && (
-          <div className="flex flex-col gap-1.5 px-4">
-            <div aria-hidden className="flex items-center gap-1.5 text-caption text-muted">
-              <span className="text-accent">✻</span> {agent}
-            </div>
-            <div className="flex items-end gap-2 rounded-composer border border-border bg-bg py-1 pr-1.5 pl-3.5">
-              <textarea
-                ref={input}
-                rows={1}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-                enterKeyHint="send"
-                aria-label={`Reply to ${agent}`}
-                placeholder={`Reply to ${agent[0]!.toUpperCase()}${agent.slice(1)}…`}
-                className="max-h-24 min-h-9 flex-1 resize-none self-center bg-transparent py-2 text-body leading-5 placeholder:text-muted focus:outline-none"
-              />
-              {text.trim() || !canDictate ? (
-                <button
-                  type="button"
-                  onClick={send}
-                  disabled={!text.trim()}
-                  aria-label="Send"
-                  className={`press flex size-9 shrink-0 items-center justify-center rounded-chip ${
-                    text.trim() ? 'bg-accent text-bg' : 'bg-surface text-muted'
-                  }`}
-                >
-                  <Send />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={dictate}
-                  aria-label="Dictate"
-                  aria-pressed={listening}
-                  className={`press flex size-9 shrink-0 items-center justify-center ${listening ? 'text-accent' : 'text-muted'}`}
-                >
-                  <Mic />
-                </button>
-              )}
-              <input
-                ref={picker}
-                type="file"
-                // ponytail: no `capture` — the button opens the library, never the camera.
-                // `image/*` is what makes iOS hand over a JPEG for a HEIC pick; see docs/UI.md.
-                accept="image/*,video/*"
-                multiple
-                hidden
-                onChange={(e) => {
-                  attach(e.target.files);
-                  e.target.value = ''; // so the same file can be picked twice
-                }}
-              />
-              <button
-                type="button"
-                aria-label="Attach"
-                onClick={() => picker.current?.click()}
-                className="flex size-9 shrink-0 items-center justify-center text-muted"
-              >
-                <Attach />
-              </button>
-            </div>
-
-            {inFlight.length > 0 && (
-              <div
-                role="progressbar"
-                aria-label="Uploading"
-                aria-valuenow={Math.round(progress * 100)}
-                className="h-0.5 overflow-hidden rounded-full bg-surface"
-              >
-                <div
-                  className="h-full bg-accent transition-[width] duration-150 ease-out motion-reduce:transition-none"
-                  style={{ width: `${progress * 100}%` }}
-                />
-              </div>
-            )}
-
-            {uploads.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {uploads.map((u) => (
-                  <span
-                    key={u.id}
-                    title={u.display ?? u.file.name}
-                    className={`flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-chip border border-border bg-bg py-0.5 pr-0.5 pl-2.5 text-caption ${
-                      u.status === 'error' ? 'text-danger' : 'text-fg'
+        {/* The dock surface is the full window; its controls stay in the reading column. */}
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-2.5 lg:max-w-4xl">
+          {agent && pills.length > 0 && (
+            <div role="group" aria-label="Quick replies" className="hscroll flex gap-2 px-4">
+              {pills.map((p, i) =>
+                p.kind === 'key' ? (
+                  <button
+                    key={`${p.label}-${i}`}
+                    type="button"
+                    aria-label={p.aria}
+                    onClick={() => keys(p.keys!)}
+                    className={`press flex shrink-0 items-center gap-1.5 rounded-chip px-3 py-[7px] text-[13px] whitespace-nowrap ${
+                      i === 0
+                        ? 'bg-accent font-semibold text-bg'
+                        : 'border border-border bg-bg font-medium text-fg active:bg-surface'
                     }`}
                   >
-                    <span className="truncate">{u.file.name}</span>
-                    <span className="shrink-0 text-muted">{human(u.file.size)}</span>
-                    <button
-                      type="button"
-                      aria-label={`Remove ${u.file.name}`}
-                      onClick={() => drop(u)}
-                      className="press flex size-7 shrink-0 items-center justify-center rounded-chip text-muted"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
+                    {p.label}
+                    {p.glyph && (
+                      <span className={`font-mono text-[11px] ${i === 0 ? 'opacity-70' : 'text-muted'}`}>{p.glyph}</span>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    key={`${p.label}-${i}`}
+                    type="button"
+                    aria-label={p.aria}
+                    onClick={() => fill(p.label)}
+                    className={`press flex shrink-0 items-center gap-1.5 rounded-chip border border-border bg-bg px-3 py-[7px] text-[13px] whitespace-nowrap active:bg-surface ${
+                      p.generated ? 'text-fg' : 'text-muted'
+                    }`}
+                  >
+                    {p.generated && <span aria-hidden className="text-accent">✦</span>}
+                    {p.label}
+                  </button>
+                ),
+              )}
+            </div>
+          )}
 
-            {uploads.some((u) => u.status === 'error') && (
-              <div role="status" className="flex flex-col gap-1">
-                {uploads
-                  .filter((u) => u.status === 'error')
-                  .map((u) => (
-                    <p key={u.id} className="text-caption text-muted">
-                      {u.file.name} failed · {u.reason}{' '}
-                      <button type="button" onClick={() => retry(u)} className="text-accent">
-                        Retry
-                      </button>
-                    </p>
-                  ))}
+          {agent && (
+            <div className="flex flex-col gap-1.5 px-4">
+              <div aria-hidden className="flex items-center gap-1.5 text-caption text-muted">
+                <span className="text-accent">✻</span> {agent}
               </div>
-            )}
+              <div className="flex items-end gap-2 rounded-composer border border-border bg-bg py-1 pr-1.5 pl-3.5">
+                <textarea
+                  ref={input}
+                  rows={1}
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      send();
+                    }
+                  }}
+                  enterKeyHint="send"
+                  aria-label={`Reply to ${agent}`}
+                  placeholder={`Reply to ${agent[0]!.toUpperCase()}${agent.slice(1)}…`}
+                  className="max-h-24 min-h-9 flex-1 resize-none self-center bg-transparent py-2 text-body leading-5 placeholder:text-muted focus:outline-none"
+                />
+                {text.trim() || !canDictate ? (
+                  <button
+                    type="button"
+                    onClick={send}
+                    disabled={!text.trim()}
+                    aria-label="Send"
+                    className={`press flex size-9 shrink-0 items-center justify-center rounded-chip ${
+                      text.trim() ? 'bg-accent text-bg' : 'bg-surface text-muted'
+                    }`}
+                  >
+                    <Send />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={dictate}
+                    aria-label="Dictate"
+                    aria-pressed={listening}
+                    className={`press flex size-9 shrink-0 items-center justify-center ${listening ? 'text-accent' : 'text-muted'}`}
+                  >
+                    <Mic />
+                  </button>
+                )}
+                <input
+                  ref={picker}
+                  type="file"
+                  // ponytail: no `capture` — the button opens the library, never the camera.
+                  // `image/*` is what makes iOS hand over a JPEG for a HEIC pick; see docs/UI.md.
+                  accept="image/*,video/*"
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    attach(e.target.files);
+                    e.target.value = ''; // so the same file can be picked twice
+                  }}
+                />
+                <button
+                  type="button"
+                  aria-label="Attach"
+                  onClick={() => picker.current?.click()}
+                  className="flex size-9 shrink-0 items-center justify-center text-muted"
+                >
+                  <Attach />
+                </button>
+              </div>
+
+              {inFlight.length > 0 && (
+                <div
+                  role="progressbar"
+                  aria-label="Uploading"
+                  aria-valuenow={Math.round(progress * 100)}
+                  className="h-0.5 overflow-hidden rounded-full bg-surface"
+                >
+                  <div
+                    className="h-full bg-accent transition-[width] duration-150 ease-out motion-reduce:transition-none"
+                    style={{ width: `${progress * 100}%` }}
+                  />
+                </div>
+              )}
+
+              {uploads.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {uploads.map((u) => (
+                    <span
+                      key={u.id}
+                      title={u.display ?? u.file.name}
+                      className={`flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-chip border border-border bg-bg py-0.5 pr-0.5 pl-2.5 text-caption ${
+                        u.status === 'error' ? 'text-danger' : 'text-fg'
+                      }`}
+                    >
+                      <span className="truncate">{u.file.name}</span>
+                      <span className="shrink-0 text-muted">{human(u.file.size)}</span>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${u.file.name}`}
+                        onClick={() => drop(u)}
+                        className="press flex size-7 shrink-0 items-center justify-center rounded-chip text-muted"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {uploads.some((u) => u.status === 'error') && (
+                <div role="status" className="flex flex-col gap-1">
+                  {uploads
+                    .filter((u) => u.status === 'error')
+                    .map((u) => (
+                      <p key={u.id} className="text-caption text-muted">
+                        {u.file.name} failed · {u.reason}{' '}
+                        <button type="button" onClick={() => retry(u)} className="text-accent">
+                          Retry
+                        </button>
+                      </p>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Last in the dock: on a phone the key bar rides directly above the keyboard,
+              like an accessory row, with the composer it types into just over it. */}
+          <div role="group" aria-label="Keys" className="hscroll flex gap-2 px-4">
+            {(agent ? AGENT_KEYS : SHELL_KEYS).map(([name, label]) => (
+              <button
+                key={name}
+                type="button"
+                aria-label={name}
+                onClick={() => keys([name])}
+                className={`press flex h-9 shrink-0 items-center justify-center rounded-chip border border-border bg-bg px-3 font-mono text-caption active:bg-surface ${
+                  name === 'ctrl+c' ? 'text-danger' : 'text-fg'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
       </div>
 
       <SwitchDrawer open={showSwitch} onClose={() => setShowSwitch(false)} state={state} currentKey={paneKey} onPick={haptic} />

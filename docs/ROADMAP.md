@@ -113,19 +113,31 @@ Verify: a photo from the phone lands in `~/.cache/taut/` on the Host and the age
 
 ## Phase 4b — grid width and quick replies
 
-- [ ] Grid: desktop/tablet column grows to the grid's natural width (no scaling below the
-      window width); Fit off by default; Wrap on by default for agent Panes; both remembered
-- [ ] Research "Resize to phone": can a herdr 0.9 client view size a Pane independently of
-      the desktop layout? If yes, design it; if no, keep it a v2 explicit action
-- [ ] Dock order: suggestion pills · composer · key bar (keyboard accessory row at the bottom)
-- [ ] Quick replies: key pills send immediately; text pills fill the composer for review.
+`[~]` = built and driven in emulated Chromium against `?mock`, awaiting a real phone.
+
+- [x] Grid: desktop/tablet column grows to the grid's natural width (no scaling below the
+      window width); Fit off by default; Wrap off by default (a wrapped prompt box read worse than a scrolled one); both remembered
+      — at 1600 px the 120-column mock Pane renders at 12 px, `<pre>` 867 px wide and
+      centred, `scrollingElement.scrollWidth` 1600 = `innerWidth`, no transform
+- [x] Research "Resize to phone": can a herdr 0.9 client view size a Pane independently of
+      the desktop layout? If yes, design it; if no, keep it a v2 explicit action — Verdict:
+      not possible in herdr 0.9 — `PaneReadParams` has no width, `pane.resize` changes the
+      shared split; see DECISIONS.md 2026-09-12 and DESIGN.md "Terminal width on a phone"
+- [x] Dock order: suggestion pills · composer · key bar (keyboard accessory row at the bottom)
+      — read back from the DOM in an emulated iPhone 13 as Quick replies, composer, Keys
+- [~] Quick replies: key pills send immediately; text pills fill the composer for review.
       Static set per agent (Claude Code, Pi) plus three generated from the last screen block
       by a small model (GLM via z.ai first, Anthropic behind the same adapter), one call per
       Status change, cached by revision, off until "Smart replies" is enabled in Settings
-- [ ] Mockup updated in docs/design (pane-agent) before the build
+      — `web/replies.ts` decides the pills and `test/replies.test.ts` covers the rules; the
+      blocked Claude Code Pane offers Yes ↵, No esc, ↑, ↓, three ✦ drafts and five texts
+- [x] Mockup updated in docs/design (pane-agent) before the build — the export already
+      shows the pill row above the composer and the key bar last
 
 Verify: on the desktop browser a 120-column pane renders at 12 px with no sideways scroll;
 on the phone a blocked Claude Code pane offers Yes/No plus three sensible replies.
+Verified 2026-09-12: a throwaway Hub on 7716 with `TAUT_SUGGEST=zai` answered
+`POST /api/panes/:key/suggest` with HTTP 200 and three pills from glm-5.2.
 
 ## Phase 5 — remote Hosts
 

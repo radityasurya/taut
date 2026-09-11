@@ -1,4 +1,3 @@
-import { offeredKeys } from '../shared/blocked.ts';
 import type { Explain } from '../shared/types.ts';
 import { Ansi } from './pane.tsx';
 
@@ -20,8 +19,8 @@ const content = (detection: string) =>
  * What herdr saw, and the keys it says the prompt takes. The first key is the primary
  * action. Sending is the caller's job: this card never talks to the Hub.
  */
-export function Blocked({ explain, onKeys }: { explain: Explain; onKeys: (keys: string[]) => void }) {
-  const keys = offeredKeys(explain);
+// Actions live in the quick-reply pills under the card; the card only says what is asked.
+export function Blocked({ explain }: { explain: Explain }) {
   const [head = 'Blocked', ...rest] = content(explain.detection);
   const title = plain(head).trim();
 
@@ -29,7 +28,7 @@ export function Blocked({ explain, onKeys }: { explain: Explain; onKeys: (keys: 
     <section
       role="region"
       aria-label="Blocked"
-      className="rise mx-3 mb-2.5 flex flex-col gap-2.5 rounded-card border border-border bg-elevated px-3.5 py-3 shadow-elevated"
+      className="rise mx-3 mb-2.5 flex flex-col gap-2.5 rounded-card border border-border bg-elevated px-3.5 py-3 shadow-elevated lg:mx-auto lg:w-full lg:max-w-4xl"
     >
       <div className="flex items-center justify-between gap-3">
         <h2 className="truncate text-[13px] font-semibold">{title}</h2>
@@ -42,32 +41,6 @@ export function Blocked({ explain, onKeys }: { explain: Explain; onKeys: (keys: 
         </pre>
       )}
 
-      <div className="flex gap-2">
-        {keys.map((k, i) => (
-          <button
-            key={k.key}
-            type="button"
-            onClick={() => onKeys([k.key])}
-            className={`press flex h-10 flex-1 items-center justify-center gap-2 rounded-chip text-[14px] ${
-              i === 0 ? 'bg-accent font-semibold text-bg' : 'border border-border bg-bg font-medium text-fg active:bg-surface'
-            }`}
-          >
-            {k.label}
-            <span className={`font-mono text-[11px] ${i === 0 ? 'opacity-70' : 'text-muted'}`}>{k.key}</span>
-          </button>
-        ))}
-        {(['up', 'down'] as const).map((k) => (
-          <button
-            key={k}
-            type="button"
-            aria-label={k}
-            onClick={() => onKeys([k])}
-            className="press flex size-10 shrink-0 items-center justify-center rounded-chip border border-border bg-bg font-mono text-[14px] active:bg-surface"
-          >
-            {k === 'up' ? '↑' : '↓'}
-          </button>
-        ))}
-      </div>
     </section>
   );
 }

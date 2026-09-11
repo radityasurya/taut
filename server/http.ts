@@ -1,5 +1,5 @@
 import { resolve, sep } from 'node:path';
-import type { InputBody, PushSubscriptionBody, ScreenMode, SeenBody } from '../shared/types.ts';
+import type { InputBody, PushSubscriptionBody, ScreenMode, SeenBody, SuggestSettingBody } from '../shared/types.ts';
 import { HerdrMux } from './herdr.ts';
 import { discoverLocalMuxes, hostId } from './hosts.ts';
 import type { Hub } from './mux.ts';
@@ -28,6 +28,13 @@ export function startHttp(hub: Hub, opts: {
       // ponytail: Tailscale-User-Login check in phase 5.
       try {
         if (req.method === 'GET' && url.pathname === '/api/state') return json(await hub.state());
+        if (req.method === 'GET' && url.pathname === '/api/settings') return json(hub.settings());
+        if (req.method === 'POST' && url.pathname === '/api/settings/suggest') {
+          let body: SuggestSettingBody;
+          try { body = await req.json(); } catch { return json({ error: 'body' }, 400); }
+          if (typeof body?.enabled !== 'boolean') return json({ error: 'body' }, 400);
+          hub.setSuggestEnabled(body.enabled); return json(hub.settings());
+        }
         if (req.method === 'GET' && url.pathname === '/api/push/vapid') return json({ publicKey: hub.vapidPublicKey() });
         if (req.method === 'POST' && url.pathname === '/api/push/subscribe') {
           let body: PushSubscriptionBody;
@@ -76,12 +83,13 @@ export function startHttp(hub: Hub, opts: {
           });
           return new Response(stream, { headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' } });
         }
-        const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain|attach)$/);
+        const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain|attach|suggest)$/);
         if (match) {
           let key: string;
           try { key = decodeURIComponent(match[1]!); } catch { return json({ error: 'bad pane key' }, 400); }
           if (!await hub.hasPane(key)) return json({ error: 'pane not found' }, 404);
           const action = match[2];
+          if (req.method === 'POST' && action === 'suggest') return json(await hub.forceSuggest(key));
           if (req.method === 'POST' && action === 'attach') {
             if (!req.body) return json({ error: 'body' }, 400);
             const cap = (Number(process.env.TAUT_MAX_ATTACHMENT_MB) || 200) * 1024 * 1024;

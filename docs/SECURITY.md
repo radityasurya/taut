@@ -68,6 +68,27 @@ Two things leave the Hub when push is on.
 The Hub never pushes for `done`, only for a Pane that enters `blocked`, so the tray sees
 one line per question, not a stream.
 
+## Smart replies
+
+Smart replies are **off** by default, on the Hub (`TAUT_SUGGEST` unset) and on the phone
+(`taut.smart`). They stay off until you turn them on in Settings.
+
+- **Screen text leaves the machine.** With the switch on, every time an agent Pane enters
+  `blocked` or `done` the Hub sends the last 40 lines of that Pane's Screen to the configured
+  provider (z.ai or Anthropic) and gets three one-line replies back. Those lines are
+  whatever the agent printed: file paths, diffs, command output, anything on the terminal.
+  A shell Pane is never sent, and no other Pane is.
+- **The key never leaves the Hub.** `TAUT_SUGGEST_KEY` (or `ZAI_API_KEY`,
+  `~/.config/zai/api-key`, `ANTHROPIC_API_KEY`) is read by the Hub, used for the one call,
+  and never sent to the phone. `GET /api/settings` reports the provider and model names
+  only.
+- **The provider is a third party.** Their retention and training terms apply to that text.
+  Leave Smart replies off on any Host whose screens you would not paste into a chat window.
+
+Turning the switch off in Settings stops the calls: it writes the Hub flag through
+`POST /api/settings/suggest` as well as the phone's own, and nothing is drafted for a
+Pane again until it goes back on.
+
 ## Attachments
 
 A file picked in the composer is written to the Pane's Host under

@@ -2,7 +2,8 @@
 // Nothing imports this in production: `installMock()` is a no-op unless the page is
 // opened with `?mock` (or built with VITE_MOCK=1).
 import type {
-  Explain, InputBody, Screen, ScreenEvent, ScreenMode, SeenBody, State, StatePane, Status,
+  Explain, InputBody, Screen, ScreenEvent, ScreenMode, SeenBody, Settings, State, StatePane, Status,
+  SuggestSettingBody,
 } from '../shared/types.ts';
 
 // ---- fixtures ----
@@ -74,11 +75,14 @@ const CLAUDE_RECENT = [
   'esc to cancel · enter to confirm',
 ].join('\r\n');
 
-/** A real htop grid, 120 columns wide: the shell Pane that proves Fit and the edge fade. */
+/** A real htop grid, 120 columns wide: the shell Pane that proves Fit and the edge fade.
+ *  Every row is padded to the full 120, the way a terminal hands one over. */
 const CYAN = '\x1b[36m';
 const YELLOW = '\x1b[33m';
 const HEAD = '\x1b[48;5;10m\x1b[38;5;0m';
 const SEL = '\x1b[48;5;12m\x1b[38;5;0m';
+/** One row of a 120-column grid: padded out, cut off, exactly like the terminal's own. */
+const wide = (text: string) => text.padEnd(120).slice(0, 120);
 const bar = (on: number, of: number) => `${GREEN}${'|'.repeat(on)}${RESET}${DIM}${' '.repeat(of - on)}${RESET}`;
 const HTOP = [
   `  ${CYAN}0${RESET}[${bar(11, 41)}${DIM}28.1%${RESET}]   ${CYAN}4${RESET}[${bar(4, 41)}${DIM} 9.4%${RESET}]`,
@@ -89,15 +93,15 @@ const HTOP = [
   `  ${CYAN}Swp${RESET}[${DIM}${' '.repeat(41)}0K/8.00G${RESET}]   ${CYAN}Load average: ${BOLD}1.42 1.18 0.97${RESET}`,
   `${' '.repeat(64)}${CYAN}Uptime: ${BOLD}14 days, 03:12:41${RESET}`,
   '',
-  `${HEAD}  PID USER       PRI  NI  VIRT   RES   SHR S  CPU% MEM%   TIME+  Command                  ${RESET}`,
-  `${SEL}48211 dev        20   0 2841M  612M 41.2M S  61.0  1.9  2:14.02 claude                   ${RESET}`,
-  '48590 dev        20   0 1412M  388M 28.0M S  18.4  1.2  0:41.55 bun server/main.ts',
-  ' 1132 dev        20   0  912M  201M 14.1M S   6.1  0.6 12:03.18 herdr server',
-  '50021 dev        20   0  734M  164M 22.9M S   3.0  0.5  0:08.40 node vite',
-  '  912 root        20   0  244M   32M 12.4M S   0.7  0.1  3:55.02 tailscaled',
-  ' 3050 dev        20   0  618M  120M 18.8M S   0.3  0.4  0:33.10 pi',
-  '  501 root        20   0   88M   14M  9.1M S   0.0  0.0  0:02.11 sshd',
-  `${DIM}F1${RESET}Help  ${DIM}F2${RESET}Setup ${DIM}F3${RESET}Search${DIM}F4${RESET}Filter${DIM}F5${RESET}Tree  ${DIM}F6${RESET}SortBy${DIM}F7${RESET}Nice -${DIM}F8${RESET}Nice +${DIM}F9${RESET}Kill  ${DIM}F10${RESET}Quit`,
+  `${HEAD}${wide('  PID USER       PRI  NI  VIRT   RES   SHR S  CPU% MEM%   TIME+  Command')}${RESET}`,
+  `${SEL}${wide('48211 dev        20   0 2841M  612M 41.2M S  61.0  1.9  2:14.02 claude --dangerously-skip-permissions')}${RESET}`,
+  wide('48590 dev        20   0 1412M  388M 28.0M S  18.4  1.2  0:41.55 bun --watch server/main.ts --port 7700'),
+  wide(' 1132 dev        20   0  912M  201M 14.1M S   6.1  0.6 12:03.18 herdr server --socket ~/.config/herdr/herdr.sock'),
+  wide('50021 dev        20   0  734M  164M 22.9M S   3.0  0.5  0:08.40 node vite --host 0.0.0.0 --port 5173'),
+  wide('  912 root        20   0  244M   32M 12.4M S   0.7  0.1  3:55.02 tailscaled --state /var/lib/tailscale/tailscaled.state'),
+  wide(' 3050 dev        20   0  618M  120M 18.8M S   0.3  0.4  0:33.10 pi --model glm-5.2 --workspace ~/projects/taut'),
+  wide('  501 root        20   0   88M   14M  9.1M S   0.0  0.0  0:02.11 sshd: dev@pts/4'),
+  `${DIM}F1${RESET}Help  ${DIM}F2${RESET}Setup ${DIM}F3${RESET}Search${DIM}F4${RESET}Filter${DIM}F5${RESET}Tree  ${DIM}F6${RESET}SortBy${DIM}F7${RESET}Nice -${DIM}F8${RESET}Nice +${DIM}F9${RESET}Kill  ${DIM}F10${RESET}Quit${' '.repeat(38)}`,
 ].join('\r\n');
 
 /** ms epoch `m` minutes ago, for `statusChangedAt`. */
@@ -141,6 +145,7 @@ export const mockState: State = {
       title: 'fix ansi parser', cwd: '~/projects/taut', agent: 'claude',
       status: 'blocked', revision: 412, seenRevision: 402, cols: 80, rows: 24,
       lastLine: 'Permission required — Bash pnpm test', statusChangedAt: ago(4),
+      suggestions: ['Yes, but skip the e2e tests', 'Run it in a worktree', 'Show me the command first'],
     },
     {
       key: 'mbp/herdr/p2', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't2', id: 'p2',
@@ -252,6 +257,9 @@ export function assertMockInvariants(): void {
     mockState.panes.some((p) => p.revision > p.seenRevision) || 'an unseen Pane',
     mockState.workspaces.some((w) => !mockState.panes.some((p) => p.muxKey === w.muxKey && p.workspaceId === w.id)) || 'an empty Workspace',
     Object.values(mockExplains).some((e) => e.ruleId.includes('permission')) || 'a permission Explain',
+    mockState.panes.some((p) => p.suggestions?.length) || 'a Pane with Smart replies',
+    mockState.panes.some((p) => p.cols === 120 && mockScreens[p.key]?.visible.text.split('\r\n').some(
+      (l) => strip(l).length >= 120)) || 'a 120-column grid',
     mockState.panes.every((p) => mockScreens[p.key]) || 'a Screen per Pane',
     mockState.panes.every((p) => mockState.tabs.some((t) => t.muxKey === p.muxKey && t.id === p.tabId)) || 'a Tab per Pane',
   ].filter((p) => p !== true);
@@ -263,7 +271,7 @@ export function assertMockInvariants(): void {
 interface Store {
   state: State;
   screens: Record<string, Record<ScreenMode, Screen>>;
-  settings: Record<string, unknown>;
+  settings: Settings;
 }
 
 let store: Store | null = null;
@@ -422,6 +430,9 @@ class MockXMLHttpRequest {
 const sanitize = (name: string) =>
   name.split(/[/\\]/).pop()!.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120) || 'file';
 
+/** What a small model would draft for a Pane with no fixture replies of its own. */
+const DRAFTS = ['Continue', 'Show me the diff', 'Stop and explain'];
+
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const noContent = () => new Response(null, { status: 204 });
 
@@ -439,6 +450,10 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
     if (method === 'GET') return json(s.settings);
     if (method === 'PUT') { Object.assign(s.settings, body as object); return json(s.settings); }
   }
+  if (method === 'POST' && url.pathname === '/api/settings/suggest') {
+    s.settings.suggest.enabled = Boolean((body as SuggestSettingBody | undefined)?.enabled);
+    return json(s.settings);
+  }
   // ponytail: just enough that the push wiring does not crash under `?mock`. The key is
   // not a real P-256 point, so `pushManager.subscribe` still refuses it in the browser.
   if (method === 'GET' && url.pathname === '/api/push/vapid') return json({ publicKey: 'mock-vapid-public-key' });
@@ -452,7 +467,7 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
     return noContent();
   }
 
-  const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain|attach)$/);
+  const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain|attach|suggest)$/);
   if (!match) return undefined;
   let key: string;
   try { key = decodeURIComponent(match[1]!); } catch { return json({ error: 'bad pane key' }, 400); }
@@ -476,6 +491,15 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
     if (!size) return json({ error: 'body' }, 400);
     const file = `${Date.now()}-${sanitize(name)}`;
     return json({ path: `/home/dev/.cache/taut/attachments/${file}`, bytes: size, display: `~/.cache/taut/attachments/${file}` });
+  }
+  // A fresh draft. The fixture's own replies come back; a real Hub asks the model, and a
+  // Hub with Smart replies off answers with the Pane unchanged.
+  if (method === 'POST' && match[2] === 'suggest') {
+    if (s.settings.suggest.enabled) {
+      pane.suggestions = mockState.panes.find((p) => p.key === key)?.suggestions ?? [...DRAFTS];
+      for (const es of sources) es.push(s, { state: true });
+    }
+    return json(pane);
   }
   if (method === 'POST' && match[2] === 'seen') {
     pane.seenRevision = (body as SeenBody | undefined)?.revision ?? pane.revision;
@@ -505,7 +529,11 @@ export function installMock(): void {
   const s: Store = {
     state: structuredClone(mockState),
     screens: structuredClone(mockScreens),
-    settings: { trustedUser: 'dev@mbp', servedBy: 'tailscale serve · 127.0.0.1:7700' },
+    settings: {
+      trustedUser: 'dev@mbp',
+      servedBy: 'tailscale serve · 127.0.0.1:7700',
+      suggest: { provider: 'zai', model: 'glm-5.2', enabled: true },
+    },
   };
   store = s;
 

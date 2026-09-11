@@ -170,7 +170,10 @@ capability flags: the UI hides write actions when `kind === 'tmux'`.
 | `GET /api/push/vapid` | the Hub's VAPID public key, base64url |
 | `POST /api/push/subscribe` (a `PushSubscription` as JSON) | store the subscription |
 | `DELETE /api/push/subscribe` `{endpoint}` | forget it |
-| `GET\|PUT /api/settings` | phase 5 |
+| `GET /api/settings` | trusted user, what serves the app, and the Smart replies provider, model and flag |
+| `POST /api/settings/suggest` `{enabled}` | turn Smart replies on or off on the Hub; the Hub persists the flag |
+| `POST /api/panes/:key/suggest` | draft Smart replies for this Pane now → the StatePane; needs `TAUT_SUGGEST`; no-op while the Hub flag is off or a request for that revision is already in flight |
+| `PUT /api/settings` | phase 5 |
 
 The Hub encrypts each payload itself (RFC 8291, aes128gcm) and signs the request (RFC
 8292, VAPID) with WebCrypto in `server/push.ts`; there is no `web-push` dependency. A push
@@ -199,4 +202,24 @@ variables.
 | `$XDG_CACHE_HOME/taut/` | `attachments/<unix-ms>-<name>` |
 | `$XDG_RUNTIME_DIR/taut/` | forwarded sockets, SSH control sockets |
 
-Environment: `TAUT_PORT` (7700), `TAUT_BIND` (127.0.0.1), `TAUT_MAX_ATTACHMENT_MB` (200).
+## Environment
+
+| Variable | Default | What |
+|---|---|---|
+| `TAUT_PORT` | `7700` | the port the Hub listens on |
+| `TAUT_BIND` | `127.0.0.1` | the interface it binds; leave it on loopback |
+| `TAUT_MAX_ATTACHMENT_MB` | `200` | the cap on one upload |
+| `TAUT_SUGGEST` | `off` | Smart replies provider: `off`, `zai` or `anthropic` |
+| `TAUT_SUGGEST_KEY` | — | the provider key. Without it, `zai` reads `ZAI_API_KEY` then `~/.config/zai/api-key`, and `anthropic` reads `ANTHROPIC_API_KEY` |
+| `TAUT_SUGGEST_MODEL` | `glm-5.2` for `zai`, `claude-haiku-4-5-20251001` for `anthropic` | the model that drafts the replies |
+| `TAUT_SUGGEST_BASE` | `https://api.z.ai/api/anthropic`, `https://api.anthropic.com` | the API base, for a proxy or a self-hosted gateway |
+
+## Smart replies
+
+With `TAUT_SUGGEST` set, the Hub asks a small model for up to three one-line
+replies whenever an agent Pane enters `blocked` or `done`, and puts them on
+`StatePane.suggestions`. One call per Status change, cached by revision, from the
+last 40 non-empty lines of the Screen. `POST /api/settings/suggest` is the
+runtime switch and `POST /api/panes/:key/suggest` forces a fresh draft. The phone
+has its own switch and shows the drafts only when both are on; what leaves the Hub
+is in [SECURITY.md](./SECURITY.md).

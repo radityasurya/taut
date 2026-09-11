@@ -3,8 +3,9 @@ import { generateKeyPairSync } from 'node:crypto';
 import os from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseAnsi } from '../shared/ansi.ts';
-import type { Explain, InputBody, Mux, PushSubscriptionBody, Screen, ScreenEvent, ScreenMode, State, Tree } from '../shared/types.ts';
+import type { Explain, InputBody, Mux, PushSubscriptionBody, Screen, ScreenEvent, ScreenMode, Settings, State, StatePane, Tree } from '../shared/types.ts';
 import { sendPush, type VapidKeys } from './push.ts';
+import { configureSuggest, type SuggestAdapter } from './suggest.ts';
 
 export interface HubListener {
   onState(s: State): void;
@@ -15,7 +16,7 @@ export interface HubListener {
 
 type Entry = { hostId: string; mux: Mux; tree?: Tree; refresh?: Promise<void>; again: boolean; timer?: ReturnType<typeof setTimeout>; interval?: ReturnType<typeof setInterval>; unsubscribe: () => void };
 
-interface StoredState { seen: Record<string, number>; vapid?: VapidKeys; subscriptions?: PushSubscriptionBody[] }
+interface StoredState { seen: Record<string, number>; vapid?: VapidKeys; subscriptions?: PushSubscriptionBody[]; suggestEnabled?: boolean }
 
 export class Hub {
   private entries = new Map<string, Entry>();
@@ -23,7 +24,10 @@ export class Hub {
   private screenTimers = new Map<HubListener, ReturnType<typeof setTimeout>>();
   private cached?: State;
   private statuses = new Map<string, { status: string; at: number }>();
-  private lastLines = new Map<string, { revision: number; line?: string }>();
+  private lastLines = new Map<string, { revision: number; line?: string; excerpt?: string }>();
+  private suggestions = new Map<string, { revision: number; values: string[] }>();
+  private suggestionTriggers = new Set<string>();
+  private suggestionRequests = new Set<string>();
   private lastLineReads = 0;
   private lastLineWaiters: (() => void)[] = [];
   private seen: Record<string, number> = {};
@@ -33,9 +37,11 @@ export class Hub {
   private readonly statePath: string;
   private vapid: VapidKeys;
   private subscriptions: PushSubscriptionBody[];
+  private suggestEnabled: boolean;
+  private readonly suggestAdapter: SuggestAdapter | null;
   private readonly refreshMs: number;
 
-  constructor(opts: { refreshMs?: number } = {}) {
+  constructor(opts: { refreshMs?: number; suggest?: SuggestAdapter | null } = {}) {
     this.refreshMs = opts.refreshMs ?? 15_000;
     const root = process.env.XDG_STATE_HOME || join(os.homedir(), '.local/state');
     this.statePath = join(root, 'taut/state.json');
@@ -43,6 +49,8 @@ export class Hub {
     try { stored = JSON.parse(readFileSync(this.statePath, 'utf8')); } catch {}
     this.seen = stored.seen ?? {};
     this.subscriptions = stored.subscriptions ?? [];
+    this.suggestEnabled = stored.suggestEnabled ?? false;
+    this.suggestAdapter = opts.suggest === undefined ? configureSuggest() : opts.suggest;
     if (stored.vapid) this.vapid = stored.vapid;
     else {
       const pair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
@@ -109,8 +117,9 @@ export class Hub {
       await this.acquireLastLineRead();
       try {
         const screen = await entry.mux.read(pane.id, 'visible');
-        const line = parseAnsi(screen.text).map(spans => spans.map(span => span.text).join('').trim()).filter(Boolean).at(-1)?.slice(0, 200);
-        this.lastLines.set(key, { revision: pane.revision, line });
+        const lines = parseAnsi(screen.text).map(spans => spans.map(span => span.text).join('').trim()).filter(Boolean);
+        const line = lines.at(-1)?.slice(0, 200);
+        this.lastLines.set(key, { revision: pane.revision, line, excerpt: lines.slice(-40).join('\n') });
       } catch {
         this.lastLines.set(key, { revision: pane.revision });
       } finally {
@@ -142,6 +151,9 @@ export class Hub {
       for (const pane of entry.tree.panes) {
         const key = `${muxKey}/${pane.id}`;
         const previous = this.statuses.get(key);
+        const requestKey = `${key}:${pane.revision}`;
+        if (previous?.status !== pane.status && this.suggestEnabled && this.suggestAdapter && pane.agent && (pane.status === 'blocked' || pane.status === 'done'))
+          this.suggestionTriggers.add(requestKey);
         if (pane.status === 'blocked' && previous?.status !== 'blocked') {
           console.log(`taut: ${key} → blocked`);
           const workspace = entry.tree.workspaces.find(item => item.id === pane.workspaceId);
@@ -158,7 +170,21 @@ export class Hub {
         }
         const status = previous?.status === pane.status ? previous : { status: pane.status, at: Date.now() };
         this.statuses.set(key, status);
-        state.panes.push({ key, muxKey, ...pane, seenRevision: this.seen[key] ?? 0, lastLine: pane.agent ? this.lastLines.get(key)?.line : undefined, statusChangedAt: status.at });
+        if (pane.status === 'working' || pane.status === 'idle') this.suggestions.delete(key);
+        const cachedSuggestion = this.suggestions.get(key);
+        state.panes.push({ key, muxKey, ...pane, seenRevision: this.seen[key] ?? 0, lastLine: pane.agent ? this.lastLines.get(key)?.line : undefined, statusChangedAt: status.at,
+          suggestions: cachedSuggestion?.revision === pane.revision ? cachedSuggestion.values : undefined });
+        const screen = this.lastLines.get(key);
+        if (this.suggestEnabled && this.suggestAdapter && pane.agent && (pane.status === 'blocked' || pane.status === 'done') &&
+          screen?.revision === pane.revision && cachedSuggestion?.revision !== pane.revision && this.suggestionTriggers.has(requestKey) && !this.suggestionRequests.has(requestKey)) {
+          this.suggestionTriggers.delete(requestKey);
+          this.suggestionRequests.add(requestKey);
+          const revision = pane.revision;
+          void this.suggestAdapter.suggest(screen.excerpt ?? '').then(values => {
+            this.suggestions.set(key, { revision, values });
+            this.recompute(); this.emitState();
+          });
+        }
       }
     }
     this.cached = state;
@@ -205,9 +231,32 @@ export class Hub {
     this.seen[paneKey] = revision; this.recompute(); this.emitState(); clearTimeout(this.seenTimer);
     this.seenTimer = setTimeout(() => this.save(), 100);
   }
+  settings(): Settings {
+    return { suggest: { provider: this.suggestAdapter?.provider, model: this.suggestAdapter?.model, enabled: this.suggestEnabled } };
+  }
+  setSuggestEnabled(value: boolean): void { this.suggestEnabled = value; this.save(); this.recompute(); this.emitState(); }
+  async forceSuggest(paneKey: string): Promise<StatePane> {
+    const state = await this.state();
+    const current = state.panes.find(item => item.key === paneKey);
+    if (!current) throw new Error('pane not found');
+    if (!this.suggestEnabled || !this.suggestAdapter) return current;
+    const requestKey = `${paneKey}:${current.revision}`;
+    // ponytail: same-revision force is a no-op once a request is in flight or done; a real
+    // re-ask needs a `force` query flag to bypass this later.
+    if (this.suggestionRequests.has(requestKey)) return current;
+    this.suggestionRequests.add(requestKey);
+    const found = this.resolve(paneKey)!;
+    const pane = found.entry.tree!.panes.find(item => item.id === found.paneId)!;
+    const screen = await found.entry.mux.read(found.paneId, 'visible');
+    const lines = parseAnsi(screen.text).map(spans => spans.map(span => span.text).join('').trim()).filter(Boolean);
+    const values = await this.suggestAdapter.suggest(lines.slice(-40).join('\n'));
+    this.suggestions.set(paneKey, { revision: pane.revision, values });
+    const next = this.recompute(); this.emitState();
+    return next.panes.find(item => item.key === paneKey)!;
+  }
   private save(): void {
     mkdirSync(dirname(this.statePath), { recursive: true });
-    writeFileSync(this.statePath, `${JSON.stringify({ seen: this.seen, vapid: this.vapid, subscriptions: this.subscriptions }, null, 2)}\n`);
+    writeFileSync(this.statePath, `${JSON.stringify({ seen: this.seen, vapid: this.vapid, subscriptions: this.subscriptions, suggestEnabled: this.suggestEnabled }, null, 2)}\n`);
   }
   vapidPublicKey(): string { return this.vapid.publicKey; }
   addSubscription(subscription: PushSubscriptionBody): void {

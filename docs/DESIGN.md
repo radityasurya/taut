@@ -64,7 +64,7 @@ The grid is what the multiplexer rendered at the server's size. Three answers, i
 
 1. **Wrap** (v1): the same grid text reflowed to the phone width, client-side. Reading mode for agent output. Replaces the earlier Screen/Recent idea: Claude Code runs on the alternate screen, so herdr's "recent" returns the same rows as the visible grid.
 2. **Fit** (v1): scale the grid to the phone width with exact metrics; the toggle label shows the grid size.
-3. **Resize to phone** (v2, explicit): ask the Mux to resize the Pane to the phone's columns and rows (herdr `pane.resize`, tmux `resize-window`). Real reflow, but it changes the desktop's view of that Pane, so it is a button, never automatic, and it restores on leaving.
+3. **Resize to phone is not possible today:** herdr 0.9 exposes rendered Screen reads and shared split-ratio resizing, but no API for exact columns/rows or a separately sized client surface; a client viewing the same Tab can change the desktop's Pane sizes. Keep Wrap and Fit. A future Resize action must be explicit, warn that it changes the shared desktop layout, record the old geometry, and restore it on leaving.
 
 ## Rules the mockups follow
 
