@@ -67,6 +67,46 @@ function lastBlock(text?: string): string {
   return blocks.at(-1) ?? '';
 }
 
+/** `1.2 MB` for the composer chip. */
+const human = (n: number) =>
+  n < 1024 ? `${n} B` : n < 1024 ** 2 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 ** 2).toFixed(1)} MB`;
+
+// ponytail: the attach reply is three fields, so it is declared here instead of imported
+// from shared/types.ts; the Hub owns its own copy of the same shape.
+interface Attached {
+  path: string;
+  bytes: number;
+  display: string;
+}
+
+interface Upload {
+  id: number;
+  file: File;
+  progress: number;
+  status: 'uploading' | 'done' | 'error';
+  path?: string;
+  display?: string;
+  reason?: string;
+}
+
+let uploadId = 0;
+
+/** The Hub's `error` field as one short phrase. Anything else is simply a failed upload. */
+const REASONS: Record<string, string> = {
+  'too large': 'too large',
+  body: 'empty file',
+  origin: 'blocked by the Hub',
+  'pane not found': 'Pane is gone',
+};
+
+const whyFailed = (xhr: XMLHttpRequest): string => {
+  try {
+    return REASONS[(JSON.parse(xhr.responseText) as { error?: string }).error ?? ''] ?? 'upload failed';
+  } catch {
+    return 'upload failed';
+  }
+};
+
 interface Recognition {
   continuous: boolean;
   interimResults: boolean;
@@ -202,6 +242,8 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
     haptic();
     void post(paneKey, 'input', { text, keys: ['enter'] } satisfies InputBody);
     setText('');
+    // The paths went with the text. A chip still uploading keeps its place.
+    setUploads((list) => list.filter((u) => u.status === 'uploading'));
     input.current?.focus();
   };
 
@@ -209,6 +251,77 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
     haptic();
     void post(paneKey, 'input', { keys: names } satisfies InputBody);
   };
+
+  // ---- attachments ----
+  // `post()` is JSON only. An upload wants progress and an abort, so it goes out on XHR:
+  // the browser sets Origin either way, which is what the Hub checks.
+  const [uploads, setUploads] = useState<Upload[]>([]);
+  const picker = useRef<HTMLInputElement>(null);
+  const running = useRef(new Map<number, XMLHttpRequest>());
+
+  // A path is only good on the Host that wrote it, so nothing follows a Pane switch.
+  useEffect(() => {
+    const flight = running.current;
+    return () => {
+      for (const xhr of flight.values()) xhr.abort();
+      flight.clear();
+      setUploads([]);
+    };
+  }, [paneKey]);
+
+  const patch = (id: number, fields: Partial<Upload>) =>
+    setUploads((list) => list.map((u) => (u.id === id ? { ...u, ...fields } : u)));
+
+  const upload = (u: Upload) => {
+    const xhr = new XMLHttpRequest();
+    running.current.set(u.id, xhr);
+    xhr.open('POST', `/api/panes/${encodeURIComponent(paneKey)}/attach`);
+    // ponytail: setRequestHeader throws above Latin-1 and the Hub flattens everything
+    // outside [A-Za-z0-9._-] anyway, so a non-ASCII name is flattened here first.
+    xhr.setRequestHeader('X-Name', u.file.name.replace(/[^\x20-\x7e]/g, '_'));
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) patch(u.id, { progress: e.loaded / e.total });
+    };
+    xhr.onload = () => {
+      running.current.delete(u.id);
+      if (xhr.status !== 200) return patch(u.id, { status: 'error', reason: whyFailed(xhr) });
+      const { path, display } = JSON.parse(xhr.responseText) as Attached;
+      patch(u.id, { status: 'done', progress: 1, path, display });
+      // Claude Code and Pi read an absolute path out of the prompt, so `path` goes in the
+      // field and `display` stays on the chip.
+      setText((t) => `${t}${t && !t.endsWith(' ') ? ' ' : ''}${path}`);
+    };
+    xhr.onerror = () => {
+      running.current.delete(u.id);
+      patch(u.id, { status: 'error', reason: 'upload failed' });
+    };
+    xhr.send(u.file);
+  };
+
+  const attach = (files: FileList | null) => {
+    for (const file of Array.from(files ?? [])) {
+      const u: Upload = { id: (uploadId += 1), file, progress: 0, status: 'uploading' };
+      setUploads((list) => [...list, u]);
+      upload(u);
+    }
+  };
+
+  const retry = (u: Upload) => {
+    patch(u.id, { progress: 0, status: 'uploading', reason: undefined });
+    upload(u);
+  };
+
+  const drop = (u: Upload) => {
+    running.current.get(u.id)?.abort();
+    running.current.delete(u.id);
+    setUploads((list) => list.filter((x) => x.id !== u.id));
+    const path = u.path;
+    // The token goes out exactly as it went in: with its separating space, either side.
+    if (path) setText((t) => t.replace(`${path} `, '').replace(` ${path}`, '').replace(path, ''));
+  };
+
+  const inFlight = uploads.filter((u) => u.status === 'uploading');
+  const progress = inFlight.length ? inFlight.reduce((n, u) => n + u.progress, 0) / inFlight.length : 0;
 
   const speak = () => {
     const synth = window.speechSynthesis;
@@ -522,14 +635,82 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
                   <Mic />
                 </button>
               )}
+              <input
+                ref={picker}
+                type="file"
+                // ponytail: no `capture` — the button opens the library, never the camera.
+                // `image/*` is what makes iOS hand over a JPEG for a HEIC pick; see docs/UI.md.
+                accept="image/*,video/*"
+                multiple
+                hidden
+                onChange={(e) => {
+                  attach(e.target.files);
+                  e.target.value = ''; // so the same file can be picked twice
+                }}
+              />
               <button
                 type="button"
                 aria-label="Attach"
+                onClick={() => picker.current?.click()}
                 className="flex size-9 shrink-0 items-center justify-center text-muted"
               >
                 <Attach />
               </button>
             </div>
+
+            {inFlight.length > 0 && (
+              <div
+                role="progressbar"
+                aria-label="Uploading"
+                aria-valuenow={Math.round(progress * 100)}
+                className="h-0.5 overflow-hidden rounded-full bg-surface"
+              >
+                <div
+                  className="h-full bg-accent transition-[width] duration-150 ease-out motion-reduce:transition-none"
+                  style={{ width: `${progress * 100}%` }}
+                />
+              </div>
+            )}
+
+            {uploads.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {uploads.map((u) => (
+                  <span
+                    key={u.id}
+                    title={u.display ?? u.file.name}
+                    className={`flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-chip border border-border bg-bg py-0.5 pr-0.5 pl-2.5 text-caption ${
+                      u.status === 'error' ? 'text-danger' : 'text-fg'
+                    }`}
+                  >
+                    <span className="truncate">{u.file.name}</span>
+                    <span className="shrink-0 text-muted">{human(u.file.size)}</span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${u.file.name}`}
+                      onClick={() => drop(u)}
+                      className="press flex size-7 shrink-0 items-center justify-center rounded-chip text-muted"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {uploads.some((u) => u.status === 'error') && (
+              <div role="status" className="flex flex-col gap-1">
+                {uploads
+                  .filter((u) => u.status === 'error')
+                  .map((u) => (
+                    <p key={u.id} className="text-caption text-muted">
+                      {u.file.name} failed · {u.reason}{' '}
+                      <button type="button" onClick={() => retry(u)} className="text-accent">
+                        Retry
+                      </button>
+                    </p>
+                  ))}
+              </div>
+            )}
           </div>
         )}
       </div>

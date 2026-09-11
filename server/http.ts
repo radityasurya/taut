@@ -3,6 +3,7 @@ import type { InputBody, PushSubscriptionBody, ScreenMode, SeenBody } from '../s
 import { HerdrMux } from './herdr.ts';
 import { discoverLocalMuxes, hostId } from './hosts.ts';
 import type { Hub } from './mux.ts';
+import { EmptyBody, sanitizeName, TooLarge, writeAttachment } from './attach.ts';
 
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -75,12 +76,31 @@ export function startHttp(hub: Hub, opts: {
           });
           return new Response(stream, { headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' } });
         }
-        const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain)$/);
+        const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain|attach)$/);
         if (match) {
           let key: string;
           try { key = decodeURIComponent(match[1]!); } catch { return json({ error: 'bad pane key' }, 400); }
           if (!await hub.hasPane(key)) return json({ error: 'pane not found' }, 404);
           const action = match[2];
+          if (req.method === 'POST' && action === 'attach') {
+            if (!req.body) return json({ error: 'body' }, 400);
+            const cap = (Number(process.env.TAUT_MAX_ATTACHMENT_MB) || 200) * 1024 * 1024;
+            const lengthHeader = req.headers.get('content-length');
+            const length = Number(lengthHeader);
+            if (length > cap) return json({ error: 'too large' }, 413);
+            try {
+              let received = 0;
+              const body = lengthHeader === null ? req.body : req.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+                transform(chunk, controller) { received += chunk.byteLength; controller.enqueue(chunk); },
+                flush() { if (received < length) throw new Error('attachment aborted'); },
+              }));
+              return json(await writeAttachment(await hub.paneHost(key), sanitizeName(req.headers.get('x-name')), body, cap));
+            } catch (error) {
+              if (error instanceof TooLarge) return json({ error: 'too large' }, 413);
+              if (error instanceof EmptyBody) return json({ error: 'body' }, 400);
+              throw error;
+            }
+          }
           if (req.method === 'GET' && action === 'screen') {
             const mode: ScreenMode = url.searchParams.get('mode') === 'recent' ? 'recent' : 'visible';
             return json(await hub.read(key, mode));

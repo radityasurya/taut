@@ -195,6 +195,11 @@ export class Hub {
     return found.entry.mux.explain(found.paneId);
   }
   async hasPane(paneKey: string): Promise<boolean> { await this.state(); return Boolean(this.resolve(paneKey)); }
+  async paneHost(paneKey: string): Promise<string> {
+    await this.state(); const found = this.resolve(paneKey);
+    if (!found) throw new Error('pane not found');
+    return found.entry.hostId;
+  }
 
   markSeen(paneKey: string, revision: number): void {
     this.seen[paneKey] = revision; this.recompute(); this.emitState(); clearTimeout(this.seenTimer);

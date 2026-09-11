@@ -165,7 +165,7 @@ capability flags: the UI hides write actions when `kind === 'tmux'`.
 | `POST /api/panes/:key/input` `{text?, keys?}` | text first, then keys |
 | `POST /api/panes/:key/seen` `{revision}` | mark Seen |
 | `GET /api/panes/:key/explain` | Explain or null |
-| `POST /api/panes/:key/attach` (raw body, `X-Name`) | phase 4 |
+| `POST /api/panes/:key/attach` (raw body, `X-Name: <filename>`) | write the file on the Pane's Host → `{path, bytes, display}`; 413 over `TAUT_MAX_ATTACHMENT_MB` |
 | `POST /api/panes/:key/close`, `/api/muxes/:key/tabs`, `/api/muxes/:key/workspaces`, `/api/rename` | phase 7 |
 | `GET /api/push/vapid` | the Hub's VAPID public key, base64url |
 | `POST /api/push/subscribe` (a `PushSubscription` as JSON) | store the subscription |
@@ -196,7 +196,7 @@ variables.
 |---|---|
 | `$XDG_CONFIG_HOME/taut/hosts.json` | Hosts added from the settings screen |
 | `$XDG_STATE_HOME/taut/state.json` | `seen`, `vapid: {publicKey, privateKey}`, `subscriptions: [...]`, trusted user |
-| `$XDG_CACHE_HOME/taut/` | attachments |
+| `$XDG_CACHE_HOME/taut/` | `attachments/<unix-ms>-<name>` |
 | `$XDG_RUNTIME_DIR/taut/` | forwarded sockets, SSH control sockets |
 
-Environment: `TAUT_PORT` (7700), `TAUT_BIND` (127.0.0.1).
+Environment: `TAUT_PORT` (7700), `TAUT_BIND` (127.0.0.1), `TAUT_MAX_ATTACHMENT_MB` (200).

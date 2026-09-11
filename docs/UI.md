@@ -7,8 +7,8 @@ in [design/](./design/).
 ## Run it
 
 - Mock data: `pnpm dev:web`, then `http://127.0.0.1:5173/?mock`. `main.tsx`
-  calls `installMock()`, which patches `fetch` and `EventSource` with the
-  fixtures in `web/mock.ts`.
+  calls `installMock()`, which patches `fetch`, `EventSource` and
+  `XMLHttpRequest` with the fixtures in `web/mock.ts`.
 - Real data: `pnpm dev` (Hub on 7700, Vite on 5173), then
   `http://127.0.0.1:5173/`.
 
@@ -117,6 +117,34 @@ inserts a newline. The mic replaces Send only while the field is empty **and**
 the browser has `webkitSpeechRecognition`; with no engine the disabled Send
 button keeps its place rather than offering a mic that does nothing. A
 transcript lands in the field for review and is never sent on its own.
+
+Attach opens the photo library, never the camera: the hidden input has
+`accept="image/*,video/*"`, `multiple`, and no `capture`. Each file goes out on
+its own XMLHttpRequest as a raw body with the name in `X-Name`; `post()` is JSON
+only, and an upload needs progress and an abort. While any upload runs, a 2 px
+accent line under the composer shows the average progress. Each file gets a
+chip with its name, its size and a × that removes it; the × also aborts an
+upload in flight and takes the path back out of the field. On 200 the Hub's
+absolute `path` is appended to the field, space-separated, because Claude Code
+and Pi read an absolute image path out of the prompt; the chip's tooltip shows
+the `~` form. A failure writes one muted line under the composer
+(`IMG_0001.jpeg failed · too large`) with a **Retry** button. Send clears the
+text and every chip that is not still uploading. `?mock` swaps in a small
+`XMLHttpRequest` stand-in that ticks progress three times and answers from the
+fake Hub.
+
+**HEIC.** iOS hands a Photos pick to the page as JPEG, so taut needs no HEIC
+decoder. A reproduction on iOS tried ten `accept` values, from empty through
+`image/*` and `image/heic` to explicit lists, and got a JPEG every time, in
+Safari, Chrome, Firefox and Edge alike: the conversion lives in iOS WebKit
+([zenn.dev test matrix](https://zenn.dev/kou_pg_0131/articles/safari-input-file-heic)).
+The value to avoid is `image/heic` in the list: from Safari 17, it makes iOS
+convert a JPEG or PNG pick *to* HEIC, renamed `tempImage….heic`
+([Apple Developer Forums](https://developer.apple.com/forums/thread/743049)).
+So `image/*,video/*` stays. A photo that reached the phone through Files,
+AirDrop or Dropbox skips that path and can still arrive as HEIC; the Hub stores
+it unchanged. Unverified here: no real iPhone was in this session, and the
+camera's **Formats** setting (High Efficiency or Most Compatible) was not tried.
 
 ## Hosts (`#/hosts`) — `web/hosts.tsx`
 

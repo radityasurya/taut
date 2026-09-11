@@ -67,6 +67,8 @@ export interface ScreenEvent extends Screen { key: string }
 export interface InputBody { text?: string; keys?: string[] }
 /** POST /api/panes/:key/seen */
 export interface SeenBody { revision: number }
+/** POST /api/panes/:key/attach */
+export interface AttachResult { path: string; bytes: number; display: string }
 /** POST /api/push/subscribe */
 export interface PushSubscriptionBody {
   endpoint: string; expirationTime?: number | null;

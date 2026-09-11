@@ -372,6 +372,56 @@ class MockEventSource extends EventTarget {
   }
 }
 
+/**
+ * Enough XMLHttpRequest for the composer's upload: the mock patches `fetch`, and the
+ * upload needs `xhr.upload.onprogress`, which `fetch` cannot give. Three progress ticks
+ * make the composer's progress line visible; the reply comes from `route()` like any
+ * other fake call.
+ * ponytail: no readyState, no events, no headers on the way back. Add them if a second
+ * caller ever needs XHR.
+ */
+class MockXMLHttpRequest {
+  status = 0;
+  responseText = '';
+  readonly upload: { onprogress: ((e: ProgressEvent) => void) | null } = { onprogress: null };
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  private url = '';
+  private name = 'file';
+  private aborted = false;
+
+  open(_method: string, url: string): void {
+    this.url = url;
+  }
+
+  setRequestHeader(name: string, value: string): void {
+    if (name.toLowerCase() === 'x-name') this.name = value;
+  }
+
+  abort(): void {
+    this.aborted = true;
+  }
+
+  async send(file: Blob): Promise<void> {
+    const total = file?.size ?? 0;
+    for (const share of [0.25, 0.6, 1]) {
+      await sleep(220);
+      if (this.aborted) return;
+      this.upload.onprogress?.({ lengthComputable: true, loaded: total * share, total } as ProgressEvent);
+    }
+    if (!store) return this.onerror?.();
+    const response = route(store, new URL(this.url, location.origin), 'POST', { name: this.name, size: total });
+    if (this.aborted) return;
+    this.status = response?.status ?? 404;
+    this.responseText = response ? await response.text() : '';
+    this.onload?.();
+  }
+}
+
+/** The Hub's name rule, repeated here so the fake path looks like the real one. */
+const sanitize = (name: string) =>
+  name.split(/[/\\]/).pop()!.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120) || 'file';
+
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const noContent = () => new Response(null, { status: 204 });
 
@@ -402,7 +452,7 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
     return noContent();
   }
 
-  const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain)$/);
+  const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain|attach)$/);
   if (!match) return undefined;
   let key: string;
   try { key = decodeURIComponent(match[1]!); } catch { return json({ error: 'bad pane key' }, 400); }
@@ -418,6 +468,14 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
     input(s, key, (body ?? {}) as InputBody);
     for (const es of sources) es.push(s, { state: true, screenKey: key });
     return noContent();
+  }
+  // The upload arrives as `{name, size}` from MockXMLHttpRequest: no bytes are kept, and
+  // the reply is the same three fields the Hub sends.
+  if (method === 'POST' && match[2] === 'attach') {
+    const { name, size } = body as { name: string; size: number };
+    if (!size) return json({ error: 'body' }, 400);
+    const file = `${Date.now()}-${sanitize(name)}`;
+    return json({ path: `/home/dev/.cache/taut/attachments/${file}`, bytes: size, display: `~/.cache/taut/attachments/${file}` });
   }
   if (method === 'POST' && match[2] === 'seen') {
     pane.seenRevision = (body as SeenBody | undefined)?.revision ?? pane.revision;
@@ -465,6 +523,7 @@ export function installMock(): void {
   window.fetch = patched as typeof window.fetch;
 
   window.EventSource = MockEventSource as unknown as typeof EventSource;
+  window.XMLHttpRequest = MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
   // `?mock&still` freezes the fixture: no new output, no Status drift, so a screenshot
   // of the same URL is the same picture twice.
   if (!location.search.includes('still')) setInterval(() => tick(s), 2500);

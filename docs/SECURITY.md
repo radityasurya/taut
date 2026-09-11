@@ -68,6 +68,25 @@ Two things leave the Hub when push is on.
 The Hub never pushes for `done`, only for a Pane that enters `blocked`, so the tray sees
 one line per question, not a stream.
 
+## Attachments
+
+A file picked in the composer is written to the Pane's Host under
+`$XDG_CACHE_HOME/taut/attachments/` (`~/.cache/taut/attachments`), with the Hub user's
+permissions. The agent in that Pane already runs as that user, so the file gives it
+nothing new.
+
+- **The name is not trusted.** It arrives in `X-Name`. The Hub keeps only the part after
+  the last `/` or `\`, turns every character outside `[A-Za-z0-9._-]` into `_`, and cuts
+  it to 120 characters. No path segment survives, so the name cannot leave the directory.
+  A `<unix-ms>-` prefix keeps two photos with the same name apart.
+- **The size is capped.** `TAUT_MAX_ATTACHMENT_MB` (200) is checked against
+  `Content-Length`, then again while the body streams. A body that passes the cap gets a
+  413, and the Hub deletes the partial file.
+- **The write is Origin-guarded**, like every non-GET request, so another site cannot put
+  a file on your Host.
+- **Nothing comes back.** The Hub never serves an attachment, lists the directory, or
+  deletes a finished file. Clean the directory yourself when you want the space back.
+
 ## Hardening checklist
 
 1. Run the Hub on the machine you already trust with SSH access to the others.
