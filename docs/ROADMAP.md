@@ -98,10 +98,34 @@ Verify: installed PWA on iPhone and Android receives a notification; tapping ope
 
 ## Phase 4 — attachments
 
-- [ ] Attach button (image/video); raw-body POST with `X-Name`; path appended to composer
-- [ ] Remote Hosts: stream into `ssh target 'cat > ~/.cache/taut/…'`
+`[~]` = built and driven in emulated mobile Chromium, awaiting verification on a real phone.
+
+- [~] Attach button (image/video); raw-body POST with `X-Name`; path appended to composer —
+      driven in an emulated iPhone 13 against `?mock`: a pick showed the progress line and
+      a chip, the absolute path landed in the field, removing the chip took the path back
+      out and aborted an upload in flight, Send cleared both, and an empty file showed
+      `empty file` with Retry. `test/attach.test.ts` covers the Hub route. A real photo
+      from a real phone, and the HEIC → JPEG hand-off (see UI.md), are pending
+- [ ] Remote Hosts: stream into `ssh target 'cat > ~/.cache/taut/…'` — needs the SSH
+      forwarders of phase 5
 
 Verify: a photo from the phone lands in `~/.cache/taut/` on the Host and the agent reads it.
+
+## Phase 4b — grid width and quick replies
+
+- [ ] Grid: desktop/tablet column grows to the grid's natural width (no scaling below the
+      window width); Fit off by default; Wrap on by default for agent Panes; both remembered
+- [ ] Research "Resize to phone": can a herdr 0.9 client view size a Pane independently of
+      the desktop layout? If yes, design it; if no, keep it a v2 explicit action
+- [ ] Dock order: suggestion pills · composer · key bar (keyboard accessory row at the bottom)
+- [ ] Quick replies: key pills send immediately; text pills fill the composer for review.
+      Static set per agent (Claude Code, Pi) plus three generated from the last screen block
+      by a small model (GLM via z.ai first, Anthropic behind the same adapter), one call per
+      Status change, cached by revision, off until "Smart replies" is enabled in Settings
+- [ ] Mockup updated in docs/design (pane-agent) before the build
+
+Verify: on the desktop browser a 120-column pane renders at 12 px with no sideways scroll;
+on the phone a blocked Claude Code pane offers Yes/No plus three sensible replies.
 
 ## Phase 5 — remote Hosts
 
