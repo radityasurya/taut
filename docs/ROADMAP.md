@@ -52,12 +52,14 @@ Verify:
 
 ## Phase 2 — triage
 
-- [ ] Explain card: detection region + buttons from footer hints + permission preset
-- [ ] Seen: POST on open and on screen updates; Home sorts unseen `blocked` first
-- [ ] Recent (reflowed) mode
-- [ ] Swipe between Panes of a Workspace
-- [ ] Read-aloud (speechSynthesis) and mic (speech recognition into the composer)
-- [ ] `test/mux.contract.test.ts` for herdr on a throwaway socket; `test/ansi.test.ts`
+`[~]` = built on mock data, awaiting verification on a real phone.
+
+- [~] Explain card: built on mock data; verify against a real blocked Claude Code prompt on the phone
+- [~] Seen: built (localStorage + POST); verify the unseen sort on a real device
+- [x] Wrap and Fit on the grid (replaced the Recent mode; see DESIGN.md "Terminal width on a phone")
+- [~] Swipe between Tabs on the strip: built, not yet exercised on a device
+- [~] Read-aloud and mic: built, not yet exercised on a device
+- [ ] `test/mux.contract.test.ts` for herdr on a throwaway socket (`test/ansi.test.ts`, `test/herdr.test.ts`, `test/mux.test.ts` exist)
 
 Verify: trigger a permission prompt in a real Pane; the card shows buttons; a tap answers.
 `bun test` is green. Confirm `herdr server` honours `HERDR_SOCKET_PATH` first.
