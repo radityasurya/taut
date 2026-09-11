@@ -4,6 +4,8 @@ import os from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import type { HostConfig, StateHost } from '../shared/types.ts';
 import { HerdrMux } from './herdr.ts';
+import { TmuxMux } from './tmux.ts';
+import { remoteTmuxSockets } from './tmux-discover.ts';
 import type { Hub } from './mux.ts';
 
 export const hostId = os.hostname();
@@ -155,12 +157,42 @@ export async function startRemoteHost(hub: Hub, host: HostDescriptor, opts: Remo
   const old = map.get(host.id); if (old) stopManaged(old);
   const managed: Managed = { children: new Set(), sockets: new Set(), stopped: false }; map.set(host.id, managed);
   hub.setHost({ ...host, online: false });
+  let herdrError: string | undefined;
+  let herdrFound = 0;
   try {
     const found = await (opts.discover ?? discoverRemote)(host.target, host.session, { spawn: opts.spawn, extraSshArgs: opts.extraSshArgs, children: managed.children });
-    if (!found.length) throw new Error(host.session ? `Mux ${host.session} is not running` : 'no running Muxes');
-    const run = runtimeDir(); await mkdir(run, { recursive: true, mode: 0o700 });
-    for (const item of found) void maintainForwarder(hub, host, item, run, managed, opts);
-  } catch (error) { hub.setHost({ ...host, online: false, error: error instanceof Error ? error.message : String(error) }); }
+    herdrFound = found.length;
+    if (found.length) {
+      const run = runtimeDir(); await mkdir(run, { recursive: true, mode: 0o700 });
+      for (const item of found) void maintainForwarder(hub, host, item, run, managed, opts);
+    }
+  } catch (error) { herdrError = error instanceof Error ? error.message : String(error); }
+  // tmux needs no forwarder: every command is one ssh round trip, kept cheap by the ControlMaster.
+  const tmuxFound = host.tmux === false ? 0 : await attachRemoteTmux(hub, host, managed, opts).catch(() => 0);
+  if (!herdrFound && !tmuxFound) {
+    hub.setHost({ ...host, online: false, error: herdrError ?? (host.session ? `Mux ${host.session} is not running` : 'no running Muxes') });
+  } else if (!herdrFound) {
+    hub.setHost({ ...host, online: true, error: undefined }); await hub.refreshHost(host.id).catch(() => {});
+  }
+}
+
+async function attachRemoteTmux(hub: Hub, host: HostDescriptor, managed: Managed, opts: RemoteOptions): Promise<number> {
+  const spawnFn = opts.spawn ?? Bun.spawn;
+  const ssh = async (cmd: string) => {
+    const child = spawnFn(['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', ...(opts.extraSshArgs ?? []), host.target!, cmd], { stdout: 'pipe', stderr: 'pipe' });
+    managed.children.add(child);
+    const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+    managed.children.delete(child);
+    return { stdout, stderr, code };
+  };
+  const q = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+  const found = await remoteTmuxSockets(ssh);
+  for (const t of found) {
+    const id = `tmux-${t.id}`;
+    const exec = (args: string[]) => ssh(['tmux', '-S', t.socketPath, ...args].map(q).join(' '));
+    if (!hub.hasMux(host.id, id)) hub.add(host.id, new TmuxMux({ id, socket: t.socketPath, exec }));
+  }
+  return found.length;
 }
 
 async function maintainForwarder(hub: Hub, host: HostDescriptor, remote: { name: string; socketPath: string }, run: string, managed: Managed, opts: RemoteOptions): Promise<void> {

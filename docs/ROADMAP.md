@@ -178,8 +178,8 @@ Verify: kill a forwarder; it reconnects. Remote Panes show a Host chip.
 
 ## Phase 6 — tmux
 
-- [ ] `server/tmux.ts` local + remote; polling; write ops hidden in the UI
-- [ ] tmux contract tests (`tmux -f /dev/null -S <sock>`)
+- [x] `server/tmux.ts` local (13 tests on a throwaway tmux) and remote over ssh (wired, `[~]` until a real remote tmux Host is added); polling; write ops hidden in the UI
+- [x] tmux contract tests (`tmux -f /dev/null -S <sock>`): tree, send, keys, onChange, agent detection
 
 Verify: tmux Panes show Status `unknown`; read and send work.
 
