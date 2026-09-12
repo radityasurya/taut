@@ -22,12 +22,12 @@ export function getTheme(): Theme {
   // `?mock&theme=latte` forces a theme, so a screenshot can reach one without touching storage.
   const forced = new URLSearchParams(location.search).get('theme') as Theme | null;
   if (forced && THEMES.includes(forced)) return forced;
-  const t = localStorage.getItem('taut.theme') as Theme | null;
+  const t = localStorage.getItem('tautan.theme') as Theme | null;
   return t && THEMES.includes(t) ? t : 'system';
 }
 
 export function setTheme(theme: Theme) {
-  localStorage.setItem('taut.theme', theme);
+  localStorage.setItem('tautan.theme', theme);
   applyTheme(theme);
 }
 
@@ -43,7 +43,7 @@ export const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)'
 /** A short tap, Android only, behind the Settings toggle. iOS has no web haptics. */
 export function haptic() {
   if (!/Android/.test(navigator.userAgent)) return;
-  if (localStorage.getItem('taut.haptics') === 'off') return;
+  if (localStorage.getItem('tautan.haptics') === 'off') return;
   navigator.vibrate?.(8);
 }
 
@@ -59,7 +59,7 @@ export function useEvents(paneKey?: string) {
   useEffect(() => setScreen(null), [paneKey]);
 
   useEffect(() => {
-    // The Hub still serves `mode=recent`; taut's UI only ever shows the visible grid, and
+    // The Hub still serves `mode=recent`; tautan's UI only ever shows the visible grid, and
     // Wrap reflows it client-side. See docs/DESIGN.md "Terminal width on a phone".
     const url = paneKey ? `/api/events?pane=${encodeURIComponent(paneKey)}&mode=visible` : '/api/events';
     const es = new EventSource(url);

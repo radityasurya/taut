@@ -1,6 +1,6 @@
 # Architecture
 
-taut is a **Hub** (a Bun process) plus a **PWA**. The Hub talks to multiplexers; the PWA
+tautan is a **Hub** (a Bun process) plus a **PWA**. The Hub talks to multiplexers; the PWA
 talks only to the Hub. Vocabulary is in [../CONTEXT.md](../CONTEXT.md).
 
 ```mermaid
@@ -47,7 +47,7 @@ flowchart TB
     Workspace --> Tab["Tab<br/>herdr tab · tmux window"]
     Tab --> Pane
     Pane -. "may have" .-> Agent["Agent<br/>Status: idle · working · blocked · done · unknown"]
-    Pane -. "taut adds" .-> Seen["Seen<br/>phone displayed it since the last Status change"]
+    Pane -. "tautan adds" .-> Seen["Seen<br/>phone displayed it since the last Status change"]
 ```
 
 Home flattens this to one list of Panes grouped by Workspace, unseen `blocked` first.
@@ -92,12 +92,12 @@ sequenceDiagram
   `recent`, `recent_unwrapped`, `detection`. No cursor position.
 - `agent.explain` returns the matched detection rule (`matched_rule.id`) and evidence;
   `pane.read` with `source: detection` returns the region herdr classified, footer hints
-  included. taut builds tap-to-answer buttons from these; it has no per-agent grammars.
-- tmux: `list-panes -a -F`, `capture-pane -e -p`, `send-keys -l`. No events; taut polls.
+  included. tautan builds tap-to-answer buttons from these; it has no per-agent grammars.
+- tmux: `list-panes -a -F`, `capture-pane -e -p`, `send-keys -l`. No events; tautan polls.
 
 ### Status and Seen
 
-Status comes from the Mux. Seen is taut's own layer on top; it decides sort order and badges.
+Status comes from the Mux. Seen is tautan's own layer on top; it decides sort order and badges.
 
 ```mermaid
 stateDiagram-v2
@@ -124,7 +124,7 @@ stateDiagram-v2
 
 ### Blocked → tap-to-answer
 
-taut writes no prompt grammars. herdr classifies the screen; taut turns that into buttons.
+tautan writes no prompt grammars. herdr classifies the screen; tautan turns that into buttons.
 
 ```mermaid
 flowchart LR
@@ -172,7 +172,7 @@ capability flags: the UI hides write actions when `kind === 'tmux'`.
 | `POST /api/panes/:key/input` `{text?, keys?}` | text first, then keys |
 | `POST /api/panes/:key/seen` `{revision}` | mark Seen |
 | `GET /api/panes/:key/explain` | Explain or null |
-| `POST /api/panes/:key/attach` (raw body, `X-Name: <filename>`) | write the file on the Pane's Host → `{path, bytes, display}`; 413 over `TAUT_MAX_ATTACHMENT_MB` |
+| `POST /api/panes/:key/attach` (raw body, `X-Name: <filename>`) | write the file on the Pane's Host → `{path, bytes, display}`; 413 over `TAUTAN_MAX_ATTACHMENT_MB` |
 | `GET /api/workspaces/:key/diff?scope=working\|staged\|base[&file=<path>]` | run `git diff --no-color -U3` in the Workspace cwd, local or over SSH, and parse it with `shared/diff.ts` → `DiffResult`. `base` resolves `review.base` → upstream → `origin/HEAD` → main/master. Over 64 KB the file list is cut and `truncated` is true; `file=` returns that one file uncapped. 400 `{error: 'scope'}`, 404 `{error: 'unknown-workspace'}`, 409 `{error: 'not-a-repo'}`, 502 `{error: <git error>}` |
 | `POST /api/muxes/:key/tabs` `{workspaceId, cwd?, label?, agent?}` | new Tab with one Pane, agent started when asked → 201 `{paneKey}` |
 | `POST /api/muxes/:key/workspaces` `{cwd?, label?, branch?}` | new Workspace; `branch` makes it a git worktree → 201 `{workspaceKey}` |
@@ -186,7 +186,7 @@ capability flags: the UI hides write actions when `kind === 'tmux'`.
 | `GET /api/settings` | trusted user, the login this request carries, what serves the app, `hosts.json`, and the Smart replies provider, model and flag |
 | `PUT /api/settings` `{trustedUser?, hosts?}` | replace either; an omitted key is left alone, `trustedUser: null` unlocks → the new `Settings` |
 | `POST /api/settings/suggest` `{enabled}` | turn Smart replies on or off on the Hub; the Hub persists the flag |
-| `POST /api/panes/:key/suggest` | draft Smart replies for this Pane now → the StatePane; needs `TAUT_SUGGEST`; no-op while the Hub flag is off or a request for that revision is already in flight |
+| `POST /api/panes/:key/suggest` | draft Smart replies for this Pane now → the StatePane; needs `TAUTAN_SUGGEST`; no-op while the Hub flag is off or a request for that revision is already in flight |
 
 The four write routes answer `{error}` with 400 (empty or over-80-character label, `cwd`
 not absolute), 403 (Origin), 404 (unknown Mux, Workspace or Pane), 501 `unsupported`
@@ -219,26 +219,26 @@ variables.
 
 | Path | Content |
 |---|---|
-| `$XDG_CONFIG_HOME/taut/hosts.json` | an array of `HostConfig` (`{id, label?, target, session?, herdr?, tmux?}`), written whole by `PUT /api/settings {hosts}` from the Hosts screen |
-| `$XDG_STATE_HOME/taut/state.json` | `seen`, `vapid: {publicKey, privateKey}`, `subscriptions: [...]`, `trustedUser` |
-| `$XDG_CACHE_HOME/taut/` | `attachments/<unix-ms>-<name>` |
-| `$XDG_RUNTIME_DIR/taut/` | one forwarded socket per remote Mux, `<hostId>-<session>.sock`, beside its `cm-*` ControlMaster socket. With no `XDG_RUNTIME_DIR` the directory is `/tmp/taut-<uid>`; either way it is mode 0700, because a unix socket a second user can open is a second user on the Mux |
+| `$XDG_CONFIG_HOME/tautan/hosts.json` | an array of `HostConfig` (`{id, label?, target, session?, herdr?, tmux?}`), written whole by `PUT /api/settings {hosts}` from the Hosts screen |
+| `$XDG_STATE_HOME/tautan/state.json` | `seen`, `vapid: {publicKey, privateKey}`, `subscriptions: [...]`, `trustedUser` |
+| `$XDG_CACHE_HOME/tautan/` | `attachments/<unix-ms>-<name>` |
+| `$XDG_RUNTIME_DIR/tautan/` | one forwarded socket per remote Mux, `<hostId>-<session>.sock`, beside its `cm-*` ControlMaster socket. With no `XDG_RUNTIME_DIR` the directory is `/tmp/tautan-<uid>`; either way it is mode 0700, because a unix socket a second user can open is a second user on the Mux |
 
 ## Environment
 
 | Variable | Default | What |
 |---|---|---|
-| `TAUT_PORT` | `7700` | the port the Hub listens on |
-| `TAUT_BIND` | `127.0.0.1` | the interface it binds; leave it on loopback |
-| `TAUT_MAX_ATTACHMENT_MB` | `200` | the cap on one upload |
-| `TAUT_SUGGEST` | `off` | Smart replies provider: `off`, `zai` or `anthropic` |
-| `TAUT_SUGGEST_KEY` | — | the provider key. Without it, `zai` reads `ZAI_API_KEY` then `~/.config/zai/api-key`, and `anthropic` reads `ANTHROPIC_API_KEY` |
-| `TAUT_SUGGEST_MODEL` | `glm-5.2` for `zai`, `claude-haiku-4-5-20251001` for `anthropic` | the model that drafts the replies |
-| `TAUT_SUGGEST_BASE` | `https://api.z.ai/api/anthropic`, `https://api.anthropic.com` | the API base, for a proxy or a self-hosted gateway |
+| `TAUTAN_PORT` | `7700` | the port the Hub listens on |
+| `TAUTAN_BIND` | `127.0.0.1` | the interface it binds; leave it on loopback |
+| `TAUTAN_MAX_ATTACHMENT_MB` | `200` | the cap on one upload |
+| `TAUTAN_SUGGEST` | `off` | Smart replies provider: `off`, `zai` or `anthropic` |
+| `TAUTAN_SUGGEST_KEY` | — | the provider key. Without it, `zai` reads `ZAI_API_KEY` then `~/.config/zai/api-key`, and `anthropic` reads `ANTHROPIC_API_KEY` |
+| `TAUTAN_SUGGEST_MODEL` | `glm-5.2` for `zai`, `claude-haiku-4-5-20251001` for `anthropic` | the model that drafts the replies |
+| `TAUTAN_SUGGEST_BASE` | `https://api.z.ai/api/anthropic`, `https://api.anthropic.com` | the API base, for a proxy or a self-hosted gateway |
 
 ## Smart replies
 
-With `TAUT_SUGGEST` set, the Hub asks a small model for up to three one-line
+With `TAUTAN_SUGGEST` set, the Hub asks a small model for up to three one-line
 replies whenever an agent Pane enters `blocked` or `done`, and puts them on
 `StatePane.suggestions`. One call per Status change, cached by revision, from the
 last 40 non-empty lines of the Screen. `POST /api/settings/suggest` is the

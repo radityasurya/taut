@@ -1,4 +1,4 @@
-# Makefile — local dev loop for taut. `make help` for the list.
+# Makefile — local dev loop for tautan. `make help` for the list.
 #
 # `make dev` frees the dev ports, starts the Hub (Bun, --watch) and the web dev server
 # (Vite HMR), exposes the UI over the tailnet with `tailscale serve`, and prints the URLs.
@@ -42,7 +42,7 @@ dev: kill-ports ## Hub + web (Vite HMR) + tailscale serve. Ctrl-C stops both.
 	@echo "  hub api:  http://127.0.0.1:$(HUB_PORT)/api/state"
 	@echo ""
 	@trap 'trap - INT TERM EXIT; echo; echo "  stopping dev stack…"; kill 0 2>/dev/null' INT TERM EXIT; \
-		TAUT_PORT=$(HUB_PORT) bun --watch server/main.ts & \
+		TAUTAN_PORT=$(HUB_PORT) bun --watch server/main.ts & \
 		$(PNPM) exec vite --port $(UI_PORT) & \
 		wait
 

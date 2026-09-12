@@ -95,7 +95,7 @@ export interface PushSubscriptionBody {
   endpoint: string; expirationTime?: number | null;
   keys: { p256dh: string; auth: string };
 }
-/** One entry of $XDG_CONFIG_HOME/taut/hosts.json (default ~/.config/taut/hosts.json). */
+/** One entry of $XDG_CONFIG_HOME/tautan/hosts.json (default ~/.config/tautan/hosts.json). */
 export interface HostConfig {
   id: string; label?: string;
   /** ssh target, e.g. `dev@vps.example.ts.net` */
@@ -116,7 +116,7 @@ export interface Settings {
   login?: string;
   servedBy?: string;
   hosts: HostConfig[];
-  /** Smart replies: provider/model absent when the Hub has no TAUT_SUGGEST; enabled is the persisted Hub flag */
+  /** Smart replies: provider/model absent when the Hub has no TAUTAN_SUGGEST; enabled is the persisted Hub flag */
   suggest: { provider?: string; model?: string; enabled: boolean };
 }
 /** POST /api/settings/suggest */

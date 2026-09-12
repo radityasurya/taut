@@ -1,4 +1,4 @@
-# taut — notes for agents
+# tautan — notes for agents
 
 Vocabulary is in `CONTEXT.md`. Use its terms (Hub, Host, Mux, Workspace, Tab, Pane, Agent,
 Status, Seen, Screen, Explain). "session" is banned: it means Mux in herdr and Workspace in tmux.
@@ -23,7 +23,7 @@ behind the two irreversible choices live in `docs/adr/`.
 - `HERDR_SOCKET_PATH` overrides local Mux discovery in the Hub, which is useful for tests.
 - Remote Host SSH is deliberately non-interactive (`BatchMode=yes`). Forwarders also need
   `ExitOnForwardFailure=yes`, `StreamLocalBindUnlink=yes`, server-alive probes, and a
-  `ControlPath` below taut's private runtime directory; removing any of these changes failure
+  `ControlPath` below tautan's private runtime directory; removing any of these changes failure
   or stale-socket behaviour.
 - Unix socket paths must be shorter than 100 bytes. Remote forwarders use readable
   `<host>-<mux>.sock` names when they fit and a short SHA-1-derived name otherwise.
@@ -34,7 +34,7 @@ behind the two irreversible choices live in `docs/adr/`.
 - `pane.report_agent` with a `state` gives the reporter authority: herdr's screen rules still
   classify (`agent.explain` says blocked) but `agent_status` keeps the reported state. To
   simulate a blocked Agent, report `--state blocked` explicitly after printing the prompt.
-- The Hub never calls any `*.focus` method. Seen is taut's own flag, never written to a Mux.
+- The Hub never calls any `*.focus` method. Seen is tautan's own flag, never written to a Mux.
 - A real Claude Code permission box matches `live_blocked_form`, not `bash_permission_prompt`.
   `live_blocked_form` has priority 980 and reads `after_last_horizontal_rule`;
   `bash_permission_prompt` has 850. Every real box ends in a rule plus
@@ -71,7 +71,7 @@ behind the two irreversible choices live in `docs/adr/`.
   is `501`.
 - Write tests run only on throwaway servers from `test/harness.ts`; the live socket at
   `~/.config/herdr/herdr.sock` must never receive a write. For a manual check, start the Hub
-  with `TAUT_PORT=7715 HERDR_SOCKET_PATH=<tmp>/h.sock` — never a Vite dev server proxying to
+  with `TAUTAN_PORT=7715 HERDR_SOCKET_PATH=<tmp>/h.sock` — never a Vite dev server proxying to
   7700.
 
 ## Conventions

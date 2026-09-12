@@ -1,4 +1,4 @@
-# taut
+# tautan
 
 See every coding agent running in your terminal multiplexers, from your phone. Reply,
 approve, attach a photo, dictate a prompt. Works over Tailscale as an installable PWA.

@@ -1,4 +1,4 @@
-// shadcn Skeleton, restyled onto taut's tokens. `--surface` is the inset-control
+// shadcn Skeleton, restyled onto tautan's tokens. `--surface` is the inset-control
 // surface, which is what a placeholder should read as.
 import type * as React from 'react';
 

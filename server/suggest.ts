@@ -26,15 +26,15 @@ export function parseSuggestions(text: string): string[] {
 }
 
 export function configureSuggest(env: Record<string, string | undefined> = process.env, opts: { timeoutMs?: number } = {}): SuggestAdapter | null {
-  const provider = env.TAUT_SUGGEST ?? 'off';
+  const provider = env.TAUTAN_SUGGEST ?? 'off';
   if (provider !== 'zai' && provider !== 'anthropic') return null;
   let fileKey: string | undefined;
-  if (provider === 'zai' && !env.TAUT_SUGGEST_KEY && !env.ZAI_API_KEY) {
+  if (provider === 'zai' && !env.TAUTAN_SUGGEST_KEY && !env.ZAI_API_KEY) {
     try { fileKey = readFileSync(join(os.homedir(), '.config/zai/api-key'), 'utf8').trim(); } catch {}
   }
-  const key = env.TAUT_SUGGEST_KEY || (provider === 'zai' ? env.ZAI_API_KEY || fileKey : env.ANTHROPIC_API_KEY);
-  const model = env.TAUT_SUGGEST_MODEL || (provider === 'zai' ? 'glm-5.2' : 'claude-haiku-4-5-20251001');
-  const base = env.TAUT_SUGGEST_BASE || (provider === 'zai' ? 'https://api.z.ai/api/anthropic' : 'https://api.anthropic.com');
+  const key = env.TAUTAN_SUGGEST_KEY || (provider === 'zai' ? env.ZAI_API_KEY || fileKey : env.ANTHROPIC_API_KEY);
+  const model = env.TAUTAN_SUGGEST_MODEL || (provider === 'zai' ? 'glm-5.2' : 'claude-haiku-4-5-20251001');
+  const base = env.TAUTAN_SUGGEST_BASE || (provider === 'zai' ? 'https://api.z.ai/api/anthropic' : 'https://api.anthropic.com');
   if (!key) return null;
   return {
     provider, model,
@@ -53,7 +53,7 @@ export function configureSuggest(env: Record<string, string | undefined> = proce
         if (!warned.has(provider)) {
           warned.add(provider);
           const detail = error instanceof Error ? error.name === 'Error' ? error.message : error.name : 'Error';
-          console.warn(`taut: suggest failed (${provider}): ${detail}`);
+          console.warn(`tautan: suggest failed (${provider}): ${detail}`);
         }
         return [];
       }

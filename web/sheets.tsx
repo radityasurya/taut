@@ -126,7 +126,7 @@ export function useWrite<T>(open: boolean, run: Submit<T>, onClose: () => void) 
 
 /**
  * Bottom sheet: the shadcn Drawer (vaul). Swipe to dismiss, scroll lock, focus trap and
- * Escape all come from vaul; taut only supplies the surface, the title and the meta line.
+ * Escape all come from vaul; tautan only supplies the surface, the title and the meta line.
  * ponytail: `repositionInputs` is off because the viewport meta already asks the browser
  * for `interactive-widget=resizes-content`, which moves the drawer for us. Turn it back
  * on if a browser without that support ever hides a focused field behind the keyboard.
@@ -255,7 +255,7 @@ export function NewTabSheet({
           label="Directory"
           name="cwd"
           defaultValue={cwd}
-          placeholder="/home/user/projects/taut"
+          placeholder="/home/user/projects/tautan"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
@@ -304,7 +304,7 @@ export function NewWorkspaceSheet({
           name="cwd"
           required
           defaultValue={cwd}
-          placeholder="/home/user/projects/taut"
+          placeholder="/home/user/projects/tautan"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}

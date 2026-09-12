@@ -11,7 +11,7 @@ const dirs: string[] = [];
 afterEach(async () => { await Promise.all(dirs.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
 
 test('Host sources merge by target with config taking precedence', async () => {
-  const dir = await mkdtemp(join(os.tmpdir(), 'taut-hosts-')); dirs.push(dir); const path = join(dir, 'hosts.json');
+  const dir = await mkdtemp(join(os.tmpdir(), 'tautan-hosts-')); dirs.push(dir); const path = join(dir, 'hosts.json');
   await writeFile(path, JSON.stringify([{ id: 'configured', label: 'Config label', target: 'u@same', session: 'chosen' }, { id: 'extra', target: 'u@extra' }]));
   const machinesJson = JSON.stringify({ machines: [
     { id: 'machine', label: 'Machine label', target: 'u@same', session: 'old', enabled: true },
@@ -25,30 +25,30 @@ test('Host sources merge by target with config taking precedence', async () => {
 
 test('failed machine discovery yields only local/config and versions gate machine list', async () => {
   expect(herdrSupportsMachines('herdr 0.8.0')).toBe(false); expect(herdrSupportsMachines('herdr 0.9.0')).toBe(true); expect(herdrSupportsMachines('1.0.0')).toBe(true);
-  const hosts = await listHosts({ machinesJson: async () => { throw new Error('unknown command'); }, configPath: '/definitely/missing/taut-hosts.json' });
+  const hosts = await listHosts({ machinesJson: async () => { throw new Error('unknown command'); }, configPath: '/definitely/missing/tautan-hosts.json' });
   expect(hosts.map(host => host.id)).toEqual([hostId]);
 });
 
 test('hosts config writes atomically and reads back', async () => {
-  const dir = await mkdtemp(join(os.tmpdir(), 'taut-hosts-')); dirs.push(dir); const path = join(dir, 'nested/hosts.json');
+  const dir = await mkdtemp(join(os.tmpdir(), 'tautan-hosts-')); dirs.push(dir); const path = join(dir, 'nested/hosts.json');
   await writeHostsConfig([{ id: 'vps', target: 'me@vps' }], path);
   expect(await readHostsConfig(path)).toEqual([{ id: 'vps', target: 'me@vps' }]);
   expect(await readFile(path, 'utf8')).toEndWith('\n');
 });
 
 test('forwarder argv is exact', () => {
-  expect(forwarderArgs('/run/taut', 'me@host', '/run/taut/h.sock', '/remote/h.sock')).toEqual([
+  expect(forwarderArgs('/run/tautan', 'me@host', '/run/tautan/h.sock', '/remote/h.sock')).toEqual([
     'ssh', '-N', '-o', 'ExitOnForwardFailure=yes', '-o', 'StreamLocalBindUnlink=yes', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3',
-    '-o', 'ControlMaster=auto', '-o', 'ControlPath=/run/taut/cm-%C', '-o', 'ControlPersist=600', '-o', 'BatchMode=yes', '-L', '/run/taut/h.sock:/remote/h.sock', 'me@host',
+    '-o', 'ControlMaster=auto', '-o', 'ControlPath=/run/tautan/cm-%C', '-o', 'ControlPersist=600', '-o', 'BatchMode=yes', '-L', '/run/tautan/h.sock:/remote/h.sock', 'me@host',
   ]);
 });
 
 test('socket paths stay below the unix limit and hash only when needed', () => {
-  expect(localSockPath('/tmp/taut', 'host', 'mux')).toBe('/tmp/taut/host-mux.sock');
+  expect(localSockPath('/tmp/tautan', 'host', 'mux')).toBe('/tmp/tautan/host-mux.sock');
   const long = localSockPath(`/tmp/${'r'.repeat(81)}`, 'host', 'mux');
   expect(Buffer.byteLength(long)).toBeLessThan(100); expect(long).not.toContain('host-mux');
   for (const [id, session] of [['../x', 'mux'], ['a/b', 'mux'], ['host', '../x']]) {
-    const path = localSockPath('/tmp/taut', id!, session!); expect(path.startsWith('/tmp/taut/')).toBe(true); expect(path).not.toContain('..');
+    const path = localSockPath('/tmp/tautan', id!, session!); expect(path.startsWith('/tmp/tautan/')).toBe(true); expect(path).not.toContain('..');
   }
 });
 
@@ -66,13 +66,13 @@ test('host validation rejects unsafe and duplicate config', () => {
   expect(validateHosts([{ id: 'a', target: 'host' }, { id: 'b', target: 'host' }])).toBe('duplicate target');
 });
 
-test('runtimeDir respects XDG_RUNTIME_DIR and falls back to /tmp/taut-<uid>', () => {
+test('runtimeDir respects XDG_RUNTIME_DIR and falls back to /tmp/tautan-<uid>', () => {
   const old = process.env.XDG_RUNTIME_DIR;
   try {
     process.env.XDG_RUNTIME_DIR = '/run/user/1000';
-    expect(runtimeDir()).toBe('/run/user/1000/taut');
+    expect(runtimeDir()).toBe('/run/user/1000/tautan');
     delete process.env.XDG_RUNTIME_DIR;
-    expect(runtimeDir()).toBe(`/tmp/taut-${process.getuid?.() ?? os.userInfo().uid}`);
+    expect(runtimeDir()).toBe(`/tmp/tautan-${process.getuid?.() ?? os.userInfo().uid}`);
   } finally {
     if (old === undefined) delete process.env.XDG_RUNTIME_DIR; else process.env.XDG_RUNTIME_DIR = old;
   }
@@ -85,14 +85,14 @@ test('forwarder backoff doubles, caps, and resets after a stable minute', () => 
 });
 
 test('remote attachment command and returned paths are stable', () => {
-  expect(remoteAttachmentCommand('../odd name')).toBe("mkdir -p ~/.cache/taut/attachments && cat > ~/.cache/taut/attachments/'odd_name'");
-  expect(remoteAttachmentResult('dev@vps', 'file.txt', 4)).toEqual({ path: '/home/dev/.cache/taut/attachments/file.txt', bytes: 4, display: '~/.cache/taut/attachments/file.txt' });
-  expect(remoteAttachmentResult('vps', 'file.txt', 4).path).toBe('~/.cache/taut/attachments/file.txt');
+  expect(remoteAttachmentCommand('../odd name')).toBe("mkdir -p ~/.cache/tautan/attachments && cat > ~/.cache/tautan/attachments/'odd_name'");
+  expect(remoteAttachmentResult('dev@vps', 'file.txt', 4)).toEqual({ path: '/home/dev/.cache/tautan/attachments/file.txt', bytes: 4, display: '~/.cache/tautan/attachments/file.txt' });
+  expect(remoteAttachmentResult('vps', 'file.txt', 4).path).toBe('~/.cache/tautan/attachments/file.txt');
   expect(validTarget('me@host')).toBe(true); expect(validTarget('-bad')).toBe(false); expect(validTarget('bad host')).toBe(false);
 });
 
 async function routeHarness(discoverRemote: (target: string, session?: string) => Promise<{ name: string; socketPath: string }[]>) {
-  const dir = await mkdtemp(join(os.tmpdir(), 'taut-routes-')); dirs.push(dir);
+  const dir = await mkdtemp(join(os.tmpdir(), 'tautan-routes-')); dirs.push(dir);
   const oldConfig = process.env.XDG_CONFIG_HOME, oldState = process.env.XDG_STATE_HOME;
   process.env.XDG_CONFIG_HOME = join(dir, 'config'); process.env.XDG_STATE_HOME = join(dir, 'state');
   const hub = new Hub({ refreshMs: 0, suggest: null }); hub.setHost({ id: hostId, label: hostId, online: true, source: 'local' });
@@ -100,8 +100,8 @@ async function routeHarness(discoverRemote: (target: string, session?: string) =
   try { Bun.serve = ((options: { fetch: typeof handle }) => { handle = options.fetch; return {} as ReturnType<typeof Bun.serve>; }) as typeof Bun.serve;
     startHttp(hub, { port: 0, hostname: '127.0.0.1', staticDir: dir, discoverRemote });
   } finally { Bun.serve = serve; }
-  const request = (path: string, body?: unknown, login?: string) => handle!(new Request(`http://taut.test${path}`, {
-    method: body === undefined ? 'GET' : path === '/api/settings' ? 'PUT' : 'POST', headers: { host: 'taut.test', origin: 'http://taut.test', ...(login ? { 'tailscale-user-login': login } : {}) },
+  const request = (path: string, body?: unknown, login?: string) => handle!(new Request(`http://tautan.test${path}`, {
+    method: body === undefined ? 'GET' : path === '/api/settings' ? 'PUT' : 'POST', headers: { host: 'tautan.test', origin: 'http://tautan.test', ...(login ? { 'tailscale-user-login': login } : {}) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }));
   return { hub, request, restore() { hub.close(); if (oldConfig === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = oldConfig; if (oldState === undefined) delete process.env.XDG_STATE_HOME; else process.env.XDG_STATE_HOME = oldState; } };

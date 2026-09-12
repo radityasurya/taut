@@ -61,8 +61,8 @@ test('host retry runs discovery and returns the refreshed host', async () => {
   } finally {
     Bun.serve = serve;
   }
-  const response = await handle!(new Request(`http://taut.test/api/hosts/${encodeURIComponent(hostId)}/retry`, {
-    method: 'POST', headers: { host: 'taut.test', origin: 'http://taut.test' },
+  const response = await handle!(new Request(`http://tautan.test/api/hosts/${encodeURIComponent(hostId)}/retry`, {
+    method: 'POST', headers: { host: 'tautan.test', origin: 'http://tautan.test' },
   }));
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ id: hostId, label: hostId, online: true, source: 'local' });

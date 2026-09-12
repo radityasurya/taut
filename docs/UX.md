@@ -1,6 +1,6 @@
-# taut UX
+# tautan UX
 
-How taut should look and behave on a phone. Decisions here are recommendations for the
+How tautan should look and behave on a phone. Decisions here are recommendations for the
 phase 0 integration pass; the settled product and architecture calls live in
 [DECISIONS.md](./DECISIONS.md) and are not reopened. Vocabulary: [../CONTEXT.md](../CONTEXT.md).
 
@@ -39,7 +39,7 @@ reverses. Wrap the hash change in `document.startViewTransition` when available;
 `if` and it degrades to an instant swap.
 
 **Correction to the brief:** iOS *does* give standalone web apps an edge back-swipe, but only
-when real history entries exist, and it double-fires against router-driven navigation. taut
+when real history entries exist, and it double-fires against router-driven navigation. tautan
 already uses hash routes, so each push is a history entry and both the iOS edge swipe and the
 Android back button work. Do not build a custom back-swipe. Do:
 
@@ -93,7 +93,7 @@ button in the reconnect banner instead.
 **Composer as the agent's prompt.** Do not clone the agent's ASCII box. Borrow three signals:
 the agent's glyph and name as a 12 px muted label above the field (`✻ claude`), the accent
 tinted to that agent, and the placeholder in the agent's own voice ("Reply to Claude…"). The
-field stays taut's rounded inset control. Cloning the TUI box would be boxy and would lie about
+field stays tautan's rounded inset control. Cloning the TUI box would be boxy and would lie about
 which characters actually reach the agent.
 
 **Agent chip row.** Under the header, horizontally scrollable, one chip per Agent Pane in the
@@ -127,7 +127,7 @@ columns is a 4.6 px advance, about a 7.6 px font. So the default is scrolled, no
 
 | Question | Recommendation |
 |---|---|
-| Stack | `--font-mono: "taut-box", ui-monospace, SFMono-Regular, Menlo, "Roboto Mono", monospace` |
+| Stack | `--font-mono: "tautan-box", ui-monospace, SFMono-Regular, Menlo, "Roboto Mono", monospace` |
 | Ship a webfont? | **Yes, one small subset.** iOS resolves `ui-monospace` to SF Mono and Menlo, both of which have full box drawing. Android's Roboto Mono does not, so U+2500 falls back to a *proportional* symbol font and every column after it shifts. That is the whole grid broken on half the devices |
 | What to subset | U+2500–257F box drawing, U+2580–259F blocks, U+2800–28FF braille (spinners), U+2190–21FF arrows, U+25A0–25FF shapes, U+2713/2717/2726. `pyftsubset` a Nerd-Font-Mono base to WOFF2 with a `unicode-range` descriptor — Latin still renders in the system font, so there is no FOUT on the common path and the file only downloads when a box character appears. Budget under 40 KB |
 | Nerd Font PUA | **Do not ship.** The PUA set is unbounded and a patched font is 2–4 MB. Accept tofu for prompt icons; revisit only if starship prompts are unreadable, then add U+E0A0–E0B8 (Powerline) alone |
@@ -140,10 +140,10 @@ columns is a 4.6 px advance, about a 7.6 px font. So the default is scrolled, no
 
 | Gesture | Verdict | Note |
 |---|---|---|
-| Swipe left/right between Agent Panes of a Workspace | **Adopt**, but not on the grid | The grid scrolls horizontally; two horizontal handlers on one surface is the unclear interaction model taut rejected. Bind the swipe to the header, chip row, blocked card and composer strip — the non-scrolling bands |
+| Swipe left/right between Agent Panes of a Workspace | **Adopt**, but not on the grid | The grid scrolls horizontally; two horizontal handlers on one surface is the unclear interaction model tautan rejected. Bind the swipe to the header, chip row, blocked card and composer strip — the non-scrolling bands |
 | Long-press a Home row | **Adopt** | 500 ms, cancel past 10 px of movement, opens a Drawer: Rename · Mark seen · Close Pane. Set `-webkit-touch-callout: none` on the row |
 | Pull down for recent mode | Reject | The `visible/recent` toggle is already one tap and always visible. A hidden gesture for a visible control is waste |
-| Double-tap for `tab` (Moshi) | Reject | Moshi has no key bar on screen; taut does. One tap already beats two |
+| Double-tap for `tab` (Moshi) | Reject | Moshi has no key bar on screen; tautan does. One tap already beats two |
 | Pinch zoom (Moshi) | Later | See fit width above |
 | Haptics | Android only | `navigator.vibrate(8)` on send, on answering a blocked prompt, and on a Pane switch. Behind a Settings toggle, default on. **iOS: none.** The `<input type="checkbox" switch>` hack was patched in iOS 26.5; do not ship an exploit as a feature |
 
@@ -221,7 +221,7 @@ Per DECISIONS, settled — this is only the placement.
 4. Add a pinned **Needs you** section above the Workspace groups holding unseen `blocked` and `done`.
 5. Replace every `text-fg/60` and `text-fg/70` with `text-muted`, and set Latte `--muted: #5c5f77`.
 6. Add `--elevated` to all six themes per the table, and use it for sheets, the tab bar and the blocked card.
-7. Ship `web/public/taut-box.woff2` (box drawing, blocks, braille, arrows, shapes) with a `unicode-range` `@font-face` first in `--font-mono`.
+7. Ship `web/public/tautan-box.woff2` (box drawing, blocks, braille, arrows, shapes) with a `unicode-range` `@font-face` first in `--font-mono`.
 8. Add the fit-width toggle labelled `80×24` (`transform: scale(clientWidth/scrollWidth)`) and the right-edge fade mask while the grid overflows.
 9. Split the key bar into agent and shell presets, and make the blocked card sticky above it.
 10. Add the agent chip row and bind the Pane swipe to the header, chip row and composer strip — not to the grid.

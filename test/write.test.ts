@@ -14,7 +14,7 @@ describe('write routes', () => {
   let failure: string | undefined;
 
   beforeEach(async () => {
-    dir = mkdtempSync(join(tmpdir(), 'taut-write-'));
+    dir = mkdtempSync(join(tmpdir(), 'tautan-write-'));
     tree = {
       workspaces: [{ id: 'w1', label: 'Workspace', cwd: dir }],
       tabs: [{ id: 't1', workspaceId: 'w1', label: 'Tab' }],
@@ -40,8 +40,8 @@ describe('write routes', () => {
 
   afterEach(() => { hub?.close(); rmSync(dir, { recursive: true, force: true }); });
   const request = (path: string, body?: unknown, origin = true) => {
-    const base = 'http://taut.test';
-    return handle(new Request(`${base}${path}`, { method: 'POST', headers: { host: 'taut.test', ...(origin ? { origin: base } : {}), ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, body: body === undefined ? undefined : JSON.stringify(body) }));
+    const base = 'http://tautan.test';
+    return handle(new Request(`${base}${path}`, { method: 'POST', headers: { host: 'tautan.test', ...(origin ? { origin: base } : {}), ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, body: body === undefined ? undefined : JSON.stringify(body) }));
   };
 
   test('creates tabs and workspaces and refreshes state', async () => {
@@ -49,7 +49,7 @@ describe('write routes', () => {
     expect(tab.status).toBe(201); expect(await tab.json()).toEqual({ paneKey: 'local/fake/p2' });
     const workspace = await request('/api/muxes/local%2Ffake/workspaces', { cwd: dir, label: 'New workspace' });
     expect(workspace.status).toBe(201); expect(await workspace.json()).toEqual({ workspaceKey: 'local/fake/w2' });
-    const state = await (await handle(new Request('http://taut.test/api/state'))).json() as { panes: Pane[] };
+    const state = await (await handle(new Request('http://tautan.test/api/state'))).json() as { panes: Pane[] };
     expect(state.panes.some(pane => pane.id === 'p2')).toBe(true);
   });
 
@@ -62,7 +62,7 @@ describe('write routes', () => {
     const label = `${'x'.repeat(80)}  `;
     const tab = await request('/api/muxes/local%2Ffake/tabs', { workspaceId: 'w1', label });
     expect(tab.status).toBe(201);
-    const state = await (await handle(new Request('http://taut.test/api/state'))).json() as { panes: Pane[] };
+    const state = await (await handle(new Request('http://tautan.test/api/state'))).json() as { panes: Pane[] };
     expect(state.panes.find(pane => pane.id === 'p2')?.title).toBe('x'.repeat(80));
   });
 

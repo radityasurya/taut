@@ -1,6 +1,6 @@
 # Security model
 
-taut lets a phone type into terminals where coding agents run with your permissions. Read
+tautan lets a phone type into terminals where coding agents run with your permissions. Read
 this before you expose a Hub to anything.
 
 ## Trust boundaries
@@ -30,20 +30,20 @@ flowchart LR
 | Tailnet → Hub | `tailscale serve` (HTTPS, identity header). The Hub itself listens on loopback only. |
 | Phone → Hub writes | `Origin` must match `Host` on every non-GET request (blocks DNS rebinding and cross-site posts). Optional trusted login: `Tailscale-User-Login` must equal the configured user. |
 | Hub → multiplexers | Unix socket file permissions. herdr has no authentication of its own. |
-| Hub → remote Hosts | Your SSH configuration. taut generates no keys and stores no credentials. |
+| Hub → remote Hosts | Your SSH configuration. tautan generates no keys and stores no credentials. |
 
 ## What an attacker can do
 
 - **Anyone on your tailnet** who can reach the Hub can read every screen and send input to
   every agent, unless you set a trusted login. On a shared tailnet, set it, and restrict
   the Hub Host with Tailscale ACLs.
-- **Anyone with the Hub user's shell** already has everything the Hub has. taut adds no
+- **Anyone with the Hub user's shell** already has everything the Hub has. tautan adds no
   new capability there.
 - **A compromised phone** can do what you can do from it. There is no second factor in v1.
 
-## What taut never does
+## What tautan never does
 
-- Listen on a non-loopback interface by default (`TAUT_BIND` changes this; do not).
+- Listen on a non-loopback interface by default (`TAUTAN_BIND` changes this; do not).
 - Store passwords, SSH keys, or tokens. `state.json` holds Seen markers, push subscriptions,
   the VAPID key pair for Web Push, and the optional trusted login.
 - Render terminal output through `innerHTML`. Screens are text spans.
@@ -55,7 +55,7 @@ Two things leave the Hub when push is on.
 
 - **`state.json` becomes a credential.** It holds the VAPID **private** key and one push
   endpoint per device. Anyone who reads the file can send notifications to your phone in
-  the Hub's name. The file lives under `$XDG_STATE_HOME/taut` (`~/.local/state/taut`), is
+  the Hub's name. The file lives under `$XDG_STATE_HOME/tautan` (`~/.local/state/tautan`), is
   written by the Hub user, and belongs in no backup you share. Delete it to revoke every
   subscription: the Hub makes a new key pair on the next start, and each phone re-subscribes
   the next time you open the app.
@@ -70,15 +70,15 @@ one line per question, not a stream.
 
 ## Smart replies
 
-Smart replies are **off** by default, on the Hub (`TAUT_SUGGEST` unset) and on the phone
-(`taut.smart`). They stay off until you turn them on in Settings.
+Smart replies are **off** by default, on the Hub (`TAUTAN_SUGGEST` unset) and on the phone
+(`tautan.smart`). They stay off until you turn them on in Settings.
 
 - **Screen text leaves the machine.** With the switch on, every time an agent Pane enters
   `blocked` or `done` the Hub sends the last 40 lines of that Pane's Screen to the configured
   provider (z.ai or Anthropic) and gets three one-line replies back. Those lines are
   whatever the agent printed: file paths, diffs, command output, anything on the terminal.
   A shell Pane is never sent, and no other Pane is.
-- **The key never leaves the Hub.** `TAUT_SUGGEST_KEY` (or `ZAI_API_KEY`,
+- **The key never leaves the Hub.** `TAUTAN_SUGGEST_KEY` (or `ZAI_API_KEY`,
   `~/.config/zai/api-key`, `ANTHROPIC_API_KEY`) is read by the Hub, used for the one call,
   and never sent to the phone. `GET /api/settings` reports the provider and model names
   only.
@@ -92,7 +92,7 @@ Pane again until it goes back on.
 ## Attachments
 
 A file picked in the composer is written to the Pane's Host under
-`$XDG_CACHE_HOME/taut/attachments/` (`~/.cache/taut/attachments`), with the Hub user's
+`$XDG_CACHE_HOME/tautan/attachments/` (`~/.cache/tautan/attachments`), with the Hub user's
 permissions. The agent in that Pane already runs as that user, so the file gives it
 nothing new.
 
@@ -100,7 +100,7 @@ nothing new.
   the last `/` or `\`, turns every character outside `[A-Za-z0-9._-]` into `_`, and cuts
   it to 120 characters. No path segment survives, so the name cannot leave the directory.
   A `<unix-ms>-` prefix keeps two photos with the same name apart.
-- **The size is capped.** `TAUT_MAX_ATTACHMENT_MB` (200) is checked against
+- **The size is capped.** `TAUTAN_MAX_ATTACHMENT_MB` (200) is checked against
   `Content-Length`, then again while the body streams. A body that passes the cap gets a
   413, and the Hub deletes the partial file.
 - **The write is Origin-guarded**, like every non-GET request, so another site cannot put
@@ -117,7 +117,7 @@ in that Workspace already runs as the same user, so the diff shows nothing the
 agent could not print into its own Pane.
 
 - **The Hub never writes.** Only `diff`, `config`, `rev-parse` and
-  `symbolic-ref` run. taut never stages, commits, checks out or resets.
+  `symbolic-ref` run. tautan never stages, commits, checks out or resets.
 - **The scope is a fixed list.** `working`, `staged` and `base` are the only
   accepted values; anything else is a 400. A `file=` value is passed after
   `--`, so a path cannot become a git option.
@@ -137,12 +137,12 @@ accidental lock-out. Clearing it with `null` disables the check; when it is unse
 never blocks access.
 
 The Hub relies on the operating-system user's SSH keys, agent, and SSH configuration. All
-discovery and transfer connections use `BatchMode=yes`, so taut never opens a password
+discovery and transfer connections use `BatchMode=yes`, so tautan never opens a password
 prompt. Host probing runs SSH against a user-provided target, but the target is validated as
 a single non-empty argv element with no whitespace and no leading dash.
 
 Attachments sent to a remote Host are streamed over SSH and stored below
-`~/.cache/taut/attachments`. Failed, empty, aborted, and over-limit transfers trigger a remote
+`~/.cache/tautan/attachments`. Failed, empty, aborted, and over-limit transfers trigger a remote
 cleanup attempt.
 
 ## Hardening checklist

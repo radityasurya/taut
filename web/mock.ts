@@ -42,7 +42,7 @@ const HINT_LINE = `${DIM}  esc to cancel · enter to confirm${RESET}`;
 
 /** A Claude Code TUI mid-run, 24 rows, ending on the permission prompt. */
 const CLAUDE_VISIBLE = [
-  `${CLAUDE}✻${RESET} ${BOLD}Claude Code${RESET} ${DIM}v2.1.4${RESET}  ${DIM}~/projects/taut${RESET}`,
+  `${CLAUDE}✻${RESET} ${BOLD}Claude Code${RESET} ${DIM}v2.1.4${RESET}  ${DIM}~/projects/tautan${RESET}`,
   '',
   `${BLUE}●${RESET} ${BOLD}Read${RESET} ${DIM}shared/ansi.ts${RESET}`,
   `  ${GREEN}⎿${RESET}  ${DIM}Read 84 lines${RESET}`,
@@ -100,7 +100,7 @@ const HTOP = [
   wide(' 1132 dev        20   0  912M  201M 14.1M S   6.1  0.6 12:03.18 herdr server --socket ~/.config/herdr/herdr.sock'),
   wide('50021 dev        20   0  734M  164M 22.9M S   3.0  0.5  0:08.40 node vite --host 0.0.0.0 --port 5173'),
   wide('  912 root        20   0  244M   32M 12.4M S   0.7  0.1  3:55.02 tailscaled --state /var/lib/tailscale/tailscaled.state'),
-  wide(' 3050 dev        20   0  618M  120M 18.8M S   0.3  0.4  0:33.10 pi --model glm-5.2 --workspace ~/projects/taut'),
+  wide(' 3050 dev        20   0  618M  120M 18.8M S   0.3  0.4  0:33.10 pi --model glm-5.2 --workspace ~/projects/tautan'),
   wide('  501 root        20   0   88M   14M  9.1M S   0.0  0.0  0:02.11 sshd: dev@pts/4'),
   `${DIM}F1${RESET}Help  ${DIM}F2${RESET}Setup ${DIM}F3${RESET}Search${DIM}F4${RESET}Filter${DIM}F5${RESET}Tree  ${DIM}F6${RESET}SortBy${DIM}F7${RESET}Nice -${DIM}F8${RESET}Nice +${DIM}F9${RESET}Kill  ${DIM}F10${RESET}Quit${' '.repeat(38)}`,
 ].join('\r\n');
@@ -118,7 +118,7 @@ export const mockState: State = {
       target: 'dev@vps.example.ts.net',
       error: 'ssh: connect to host vps.example.ts.net port 22: Connection timed out',
     },
-    // Discovered, so taut may not edit it: the card that carries the machine-list caption.
+    // Discovered, so tautan may not edit it: the card that carries the machine-list caption.
     { id: 'unraid', label: 'unraid', online: true, source: 'machines', target: 'root@unraid' },
   ],
   muxes: [
@@ -128,7 +128,7 @@ export const mockState: State = {
     { key: 'unraid/tmux', hostId: 'unraid', kind: 'tmux', label: 'main', online: true },
   ],
   workspaces: [
-    { key: 'mbp/herdr/taut', muxKey: 'mbp/herdr', id: 'taut', label: 'taut', cwd: '~/projects/taut' },
+    { key: 'mbp/herdr/tautan', muxKey: 'mbp/herdr', id: 'tautan', label: 'tautan', cwd: '~/projects/tautan' },
     { key: 'mbp/herdr/digivaley', muxKey: 'mbp/herdr', id: 'digivaley', label: 'digivaley.com', cwd: '~/projects/digivaley.com' },
     // Empty on purpose: Home must not render a Workspace with no Panes.
     { key: 'mbp/herdr/dotfiles', muxKey: 'mbp/herdr', id: 'dotfiles', label: 'dotfiles', cwd: '~/.local/share/chezmoi' },
@@ -138,9 +138,9 @@ export const mockState: State = {
   ],
   // herdr numbers Tabs `t<n>`; tmux windows are their index. Both are the Mux's own id.
   tabs: [
-    { key: 'mbp/herdr/t1', muxKey: 'mbp/herdr', workspaceId: 'taut', id: 't1', label: 'main' },
-    { key: 'mbp/herdr/t2', muxKey: 'mbp/herdr', workspaceId: 'taut', id: 't2', label: 'tests' },
-    { key: 'mbp/herdr/t3', muxKey: 'mbp/herdr', workspaceId: 'taut', id: 't3', label: 'docs' },
+    { key: 'mbp/herdr/t1', muxKey: 'mbp/herdr', workspaceId: 'tautan', id: 't1', label: 'main' },
+    { key: 'mbp/herdr/t2', muxKey: 'mbp/herdr', workspaceId: 'tautan', id: 't2', label: 'tests' },
+    { key: 'mbp/herdr/t3', muxKey: 'mbp/herdr', workspaceId: 'tautan', id: 't3', label: 'docs' },
     { key: 'mbp/herdr/t4', muxKey: 'mbp/herdr', workspaceId: 'digivaley', id: 't4', label: 'main' },
     { key: 'mbp/herdr/t5', muxKey: 'mbp/herdr', workspaceId: 'digivaley', id: 't5', label: 'shell' },
     { key: 'mbp/tmux/0', muxKey: 'mbp/tmux', workspaceId: 'admin', id: '0', label: 'htop' },
@@ -150,26 +150,26 @@ export const mockState: State = {
   ],
   panes: [
     {
-      key: 'mbp/herdr/p1', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't1', id: 'p1',
-      title: 'fix ansi parser', cwd: '~/projects/taut', agent: 'claude',
+      key: 'mbp/herdr/p1', muxKey: 'mbp/herdr', workspaceId: 'tautan', tabId: 't1', id: 'p1',
+      title: 'fix ansi parser', cwd: '~/projects/tautan', agent: 'claude',
       status: 'blocked', revision: 412, seenRevision: 402, cols: 80, rows: 24,
       lastLine: 'Permission required — Bash pnpm test', statusChangedAt: ago(4),
       suggestions: ['Yes, but skip the e2e tests', 'Run it in a worktree', 'Show me the command first'],
     },
     {
-      key: 'mbp/herdr/p2', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't2', id: 'p2',
-      title: 'wire SSE events', cwd: '~/projects/taut', agent: 'claude',
+      key: 'mbp/herdr/p2', muxKey: 'mbp/herdr', workspaceId: 'tautan', tabId: 't2', id: 'p2',
+      title: 'wire SSE events', cwd: '~/projects/tautan', agent: 'claude',
       status: 'working', revision: 1180, seenRevision: 1180, cols: 80, rows: 24,
       lastLine: 'Reading server/mux.ts…', statusChangedAt: ago(2),
     },
     {
-      key: 'mbp/herdr/p3', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't2', id: 'p3',
-      title: 'pnpm dev', cwd: '~/projects/taut',
+      key: 'mbp/herdr/p3', muxKey: 'mbp/herdr', workspaceId: 'tautan', tabId: 't2', id: 'p3',
+      title: 'pnpm dev', cwd: '~/projects/tautan',
       status: 'unknown', revision: 87, seenRevision: 87, cols: 80, rows: 24, statusChangedAt: ago(46),
     },
     {
-      key: 'mbp/herdr/p4', muxKey: 'mbp/herdr', workspaceId: 'taut', tabId: 't3', id: 'p4',
-      title: 'migrate hosts.json', cwd: '~/projects/taut', agent: 'pi',
+      key: 'mbp/herdr/p4', muxKey: 'mbp/herdr', workspaceId: 'tautan', tabId: 't3', id: 'p4',
+      title: 'migrate hosts.json', cwd: '~/projects/tautan', agent: 'pi',
       status: 'done', revision: 640, seenRevision: 611, cols: 80, rows: 24,
       lastLine: '3 files changed, tests green', statusChangedAt: ago(12),
     },
@@ -397,7 +397,7 @@ const BASE_FILES: DiffFile[] = [
       '\\ No newline at end of file',
     ]),
   ], { oldPath: '/dev/null' }),
-  file('web/public/taut-box.woff2', [], { binary: true, oldPath: 'web/public/taut-box.woff2' }),
+  file('web/public/tautan-box.woff2', [], { binary: true, oldPath: 'web/public/tautan-box.woff2' }),
 ];
 
 /** The Workspace whose diff is cut short, so `?mock&open=diff` always lands on that state. */
@@ -460,7 +460,7 @@ const WHOLE: Record<string, DiffFile> = {
 };
 
 const MOCK_DIFFS: Record<string, Partial<Record<DiffScope, DiffResult>>> = {
-  'mbp/herdr/taut': {
+  'mbp/herdr/tautan': {
     working: { scope: 'working', files: [RENAMED, MULTI_HUNK], truncated: false },
     staged: { scope: 'staged', files: [STAGED_TYPES], truncated: false },
     base: { scope: 'base', base: 'main', files: BASE_FILES, truncated: false },
@@ -852,7 +852,7 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
     const { name, size } = body as { name: string; size: number };
     if (!size) return json({ error: 'body' }, 400);
     const file = `${Date.now()}-${sanitize(name)}`;
-    return json({ path: `/home/dev/.cache/taut/attachments/${file}`, bytes: size, display: `~/.cache/taut/attachments/${file}` });
+    return json({ path: `/home/dev/.cache/tautan/attachments/${file}`, bytes: size, display: `~/.cache/tautan/attachments/${file}` });
   }
   // A fresh draft. The fixture's own replies come back; a real Hub asks the model, and a
   // Hub with Smart replies off answers with the Pane unchanged.

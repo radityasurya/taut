@@ -1,8 +1,8 @@
 # Design direction
 
-What taut should look like and why. The research behind each call is in [UX.md](./UX.md);
+What tautan should look like and why. The research behind each call is in [UX.md](./UX.md);
 the settled product decisions are in [DECISIONS.md](./DECISIONS.md). The mockups are a
-design canvas you can edit: **[taut Screens](https://claude.ai/code/artifact/ee67305a-ece1-4d62-b0b7-e866752a7030)**
+design canvas you can edit: **[tautan Screens](https://claude.ai/code/artifact/ee67305a-ece1-4d62-b0b7-e866752a7030)**
 (source under [design/src/](./design/src/), exports under [design/](./design/)).
 
 ## In one paragraph

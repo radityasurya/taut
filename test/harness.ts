@@ -28,7 +28,7 @@ export function herdrRpc(sock: string, method: string, params: Record<string, un
 
 export async function startThrowawayHerdr(): Promise<{ sock: string; dir: string; stop(): Promise<void> }> {
   if (!herdr) throw new Error('herdr is not on PATH');
-  const dir = await mkdtemp(join(os.tmpdir(), 'taut-herdr-'));
+  const dir = await mkdtemp(join(os.tmpdir(), 'tautan-herdr-'));
   const state = join(dir, 'state');
   const manifests = join(os.homedir(), '.local/state/herdr/agent-detection/remote');
   await mkdir(join(state, 'herdr/agent-detection'), { recursive: true });

@@ -21,7 +21,7 @@ const canListen = (() => {
 
 describe.skipIf(!canListen)('web push', () => {
   const oldStateHome = process.env.XDG_STATE_HOME;
-  const stateHome = mkdtempSync(join(tmpdir(), 'taut-push-'));
+  const stateHome = mkdtempSync(join(tmpdir(), 'tautan-push-'));
   let pushServer: ReturnType<typeof Bun.serve>;
   let server: ReturnType<typeof Bun.serve>;
   let hub: Hub;
@@ -38,7 +38,7 @@ describe.skipIf(!canListen)('web push', () => {
       return new Response(null, { status: 201 });
     } });
     const tree: Tree = {
-      workspaces: [{ id: 'work', label: 'Taut' }], tabs: [{ id: 'tab', workspaceId: 'work', label: 'Tab' }],
+      workspaces: [{ id: 'work', label: 'Tautan' }], tabs: [{ id: 'tab', workspaceId: 'work', label: 'Tab' }],
       panes: [{ id: 'pane', tabId: 'tab', workspaceId: 'work', title: 'Prompt', agent: 'Codex', status, revision: 1 }],
     };
     const mux: Mux = {
@@ -73,7 +73,7 @@ describe.skipIf(!canListen)('web push', () => {
     const ok = `http://127.0.0.1:${pushServer.port}/ok`;
     const gone = `http://127.0.0.1:${pushServer.port}/gone`;
     expect((await subscribe(ok)).status).toBe(204); expect((await subscribe(gone)).status).toBe(204); expect((await subscribe(ok)).status).toBe(204);
-    const statePath = join(stateHome, 'taut/state.json');
+    const statePath = join(stateHome, 'tautan/state.json');
     expect(JSON.parse(readFileSync(statePath, 'utf8')).subscriptions).toHaveLength(2);
 
     status = 'blocked'; changed?.('all');

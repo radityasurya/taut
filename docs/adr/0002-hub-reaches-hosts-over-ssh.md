@@ -10,7 +10,7 @@ Accepted
 
 Neither herdr nor tmux exposes a network surface; both are unix sockets. The user has several
 Hosts (a VPS, an Unraid box, a desktop) and wants one screen listing all of them. Options: a
-taut process per Host with the phone fanning out to each origin, or one Hub that reaches the
+tautan process per Host with the phone fanning out to each origin, or one Hub that reaches the
 other Hosts over SSH, the same way herdr's own remote feature does.
 
 ## Decision
@@ -22,6 +22,6 @@ The Hub's own machine is always a Host.
 ## Consequences
 
 - The phone has one origin, one service worker, one push subscription.
-- Remote Hosts need only sshd plus the multiplexer; no taut install there.
+- Remote Hosts need only sshd plus the multiplexer; no tautan install there.
 - The Hub holds SSH access to every Host. Keep it on a machine you already trust with that.
 - If the Hub is down, every Host is invisible. Run it on the machine that is never off.

@@ -14,7 +14,7 @@ type Spawn = typeof Bun.spawn;
 const malformedWarnings = new Set<string>();
 
 export function hostsConfigPath(): string {
-  return join(process.env.XDG_CONFIG_HOME || join(os.homedir(), '.config'), 'taut/hosts.json');
+  return join(process.env.XDG_CONFIG_HOME || join(os.homedir(), '.config'), 'tautan/hosts.json');
 }
 
 export async function readHostsConfig(path = hostsConfigPath()): Promise<HostConfig[]> {
@@ -24,7 +24,7 @@ export async function readHostsConfig(path = hostsConfigPath()): Promise<HostCon
     if (value.some(row => !row || typeof row !== 'object' || typeof row.id !== 'string' || !row.id.trim() || typeof row.target !== 'string' || !row.target)) throw new Error('invalid Host config');
     return value;
   } catch (error: any) {
-    if (error?.code !== 'ENOENT' && !malformedWarnings.has(path)) { malformedWarnings.add(path); console.warn(`taut: ignoring malformed ${path}: ${error instanceof Error ? error.message : error}`); }
+    if (error?.code !== 'ENOENT' && !malformedWarnings.has(path)) { malformedWarnings.add(path); console.warn(`tautan: ignoring malformed ${path}: ${error instanceof Error ? error.message : error}`); }
     return [];
   }
 }
@@ -63,12 +63,12 @@ export async function listHosts(opts: { machinesJson?: string | (() => Promise<s
   const result: HostDescriptor[] = [{ id: hostId, label: hostId, online: true, source: 'local' }];
   const targets = new Map<string, number>();
   for (const row of machines.filter(row => row?.enabled && typeof row.target === 'string')) {
-    if (!validTarget(row.target)) { console.warn(`taut: ignoring host ${String(row.id)}: invalid target`); continue; }
+    if (!validTarget(row.target)) { console.warn(`tautan: ignoring host ${String(row.id)}: invalid target`); continue; }
     targets.set(row.target, result.length);
     result.push({ id: String(row.id), label: String(row.label || row.id), target: row.target, session: row.session, online: false, source: 'machines' });
   }
   for (const row of config) {
-    if (!validTarget(row.target)) { console.warn(`taut: ignoring host ${row.id}: invalid target`); continue; }
+    if (!validTarget(row.target)) { console.warn(`tautan: ignoring host ${row.id}: invalid target`); continue; }
     const index = targets.get(row.target);
     const value: HostDescriptor = { ...row, label: row.label || row.id, online: false, source: 'config' };
     if (index === undefined) { targets.set(row.target, result.length); result.push(value); }
@@ -128,7 +128,7 @@ export async function discoverRemote(target: string, session?: string, opts: { s
 
 export function runtimeDir(): string {
   const xdg = process.env.XDG_RUNTIME_DIR;
-  return xdg ? join(xdg, 'taut') : `/tmp/taut-${process.getuid?.() ?? os.userInfo().uid}`;
+  return xdg ? join(xdg, 'tautan') : `/tmp/tautan-${process.getuid?.() ?? os.userInfo().uid}`;
 }
 export function localSockPath(run: string, id: string, session: string): string {
   const raw = join(run, `${id}-${session}.sock`);

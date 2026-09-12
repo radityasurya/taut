@@ -40,10 +40,10 @@ describe('workspace diff route', () => {
   let dir: string, plain: string, hub: Hub;
   let handle: (request: Request) => Response | Promise<Response>;
   const git = (args: string[]) => Bun.spawnSync(['git', ...args], { cwd: dir, stdout: 'pipe', stderr: 'pipe' });
-  const get = (key = 'local/fake/w1', query = 'scope=working') => handle(new Request(`http://taut.test/api/workspaces/${encodeURIComponent(key)}/diff?${query}`));
+  const get = (key = 'local/fake/w1', query = 'scope=working') => handle(new Request(`http://tautan.test/api/workspaces/${encodeURIComponent(key)}/diff?${query}`));
 
   beforeEach(async () => {
-    dir = mkdtempSync(join(tmpdir(), 'taut-diff-repo-')); plain = mkdtempSync(join(tmpdir(), 'taut-diff-plain-'));
+    dir = mkdtempSync(join(tmpdir(), 'tautan-diff-repo-')); plain = mkdtempSync(join(tmpdir(), 'tautan-diff-plain-'));
     git(['init', '-b', 'main']); git(['config', 'user.email', 'test@example.com']); git(['config', 'user.name', 'Test']);
     writeFileSync(join(dir, 'a.txt'), 'one\ntwo\n'); writeFileSync(join(dir, 'other.txt'), 'old\n'); git(['add', '.']); git(['commit', '-m', 'initial']);
     const tree: Tree = { workspaces: [{ id: 'w1', label: 'Repo', cwd: dir }, { id: 'plain', label: 'Plain', cwd: plain }], tabs: [], panes: [] };

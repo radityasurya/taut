@@ -34,14 +34,14 @@ export function Settings() {
   const [theme, choose] = useState(getTheme);
   const [prefs, setPrefs] = useState<HubSettings>({ hosts: [], suggest: { enabled: false } });
   const [access, setAccess] = useState('');
-  const [haptics, setHaptics] = useState(() => localStorage.getItem('taut.haptics') !== 'off');
+  const [haptics, setHaptics] = useState(() => localStorage.getItem('tautan.haptics') !== 'off');
   // Push state is the browser's, not the Hub's: the intent in localStorage plus a live
   // permission. `/api/settings` has no push field to read.
   const [push, setPush] = useState(pushOn);
   const [pushNote, setPushNote] = useState('');
   // Smart replies live in two places: the Hub decides whether to draft at all, this phone
   // decides whether to show the drafts. On means both, and the switch writes both.
-  const [smart, setSmart] = useState(() => localStorage.getItem('taut.smart') === 'on');
+  const [smart, setSmart] = useState(() => localStorage.getItem('tautan.smart') === 'on');
 
   const read = () => api<HubSettings>('/api/settings', undefined, 'GET').then(setPrefs).catch(() => {});
   useEffect(() => void read(), []);
@@ -53,7 +53,7 @@ export function Settings() {
     api<HubSettings>('/api/settings', { trustedUser }, 'PUT').then(read, (e: unknown) =>
       setAccess(
         (e instanceof Error && e.message) === 'login'
-          ? 'The Hub did not see that login on this request. Open taut through tailscale serve and try again.'
+          ? 'The Hub did not see that login on this request. Open tautan through tailscale serve and try again.'
           : 'The Hub did not save that. Check the connection and try again.',
       ),
     );
@@ -123,7 +123,7 @@ export function Settings() {
             checked={haptics}
             onChange={(v) => {
               setHaptics(v);
-              localStorage.setItem('taut.haptics', v ? 'on' : 'off');
+              localStorage.setItem('tautan.haptics', v ? 'on' : 'off');
             }}
           />
         </>
@@ -132,12 +132,12 @@ export function Settings() {
       <h2 className="label-caps px-4 pt-6 pb-1">Replies</h2>
       <Toggle
         label="Smart replies"
-        hint={provider || 'not configured · set TAUT_SUGGEST on the Hub'}
+        hint={provider || 'not configured · set TAUTAN_SUGGEST on the Hub'}
         checked={Boolean(provider) && suggest.enabled && smart}
         disabled={!provider}
         onChange={(v) => {
           setSmart(v);
-          localStorage.setItem('taut.smart', v ? 'on' : 'off');
+          localStorage.setItem('tautan.smart', v ? 'on' : 'off');
           setPrefs({ ...prefs, suggest: { ...suggest, enabled: v } });
           void fetch('/api/settings/suggest', {
             method: 'POST',

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. taut is small and opinionated; this page tells you how to fit in.
+Thanks for helping. tautan is small and opinionated; this page tells you how to fit in.
 
 ## Setup
 

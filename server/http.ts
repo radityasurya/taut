@@ -227,7 +227,7 @@ export function startHttp(hub: Hub, opts: {
           if (req.method === 'POST' && action === 'suggest') return json(await hub.forceSuggest(key));
           if (req.method === 'POST' && action === 'attach') {
             if (!req.body) return json({ error: 'body' }, 400);
-            const cap = (Number(process.env.TAUT_MAX_ATTACHMENT_MB) || 200) * 1024 * 1024;
+            const cap = (Number(process.env.TAUTAN_MAX_ATTACHMENT_MB) || 200) * 1024 * 1024;
             const lengthHeader = req.headers.get('content-length');
             const length = Number(lengthHeader);
             if (length > cap) return json({ error: 'too large' }, 413);
@@ -272,7 +272,7 @@ export function startHttp(hub: Hub, opts: {
         if (path !== root && !path.startsWith(`${root}${sep}`)) return json({ error: 'not found' }, 404);
         let file = Bun.file(path);
         if (!await file.exists()) { path = resolve(root, 'index.html'); file = Bun.file(path); }
-        if (!await file.exists()) return new Response('taut web build not found; run pnpm build\n', { status: 404 });
+        if (!await file.exists()) return new Response('tautan web build not found; run pnpm build\n', { status: 404 });
         const headers = new Headers();
         if (path.endsWith('/index.html') || path.endsWith('/sw.js') || path.endsWith('/manifest.webmanifest')) headers.set('cache-control', 'no-cache');
         if (file.type) headers.set('content-type', file.type);

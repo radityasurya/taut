@@ -132,19 +132,19 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
   // are the layout (htop, logs). Remembered per kind, not per Pane.
   const kind = pane?.agent ? 'agent' : 'shell';
   const [wraps, setWraps] = useState(() => ({
-    agent: localStorage.getItem('taut.wrap.agent') === 'on',
-    shell: localStorage.getItem('taut.wrap.shell') === 'on',
+    agent: localStorage.getItem('tautan.wrap.agent') === 'on',
+    shell: localStorage.getItem('tautan.wrap.shell') === 'on',
   }));
   const wrap = wraps[kind];
   const setWrap = (v: boolean) => {
-    localStorage.setItem(`taut.wrap.${kind}`, v ? 'on' : 'off');
+    localStorage.setItem(`tautan.wrap.${kind}`, v ? 'on' : 'off');
     setWraps((w) => ({ ...w, [kind]: v }));
   };
   // Fit is off until the user asks for it: the column grows to the grid's own width on a
   // desktop, so scaling is a phone answer, not the default. The scale is min(1, …), so a
   // grid that already fits is left alone even then.
-  const [fit, setFitState] = useState(() => localStorage.getItem('taut.fit') === 'on');
-  const setFit = (v: boolean) => { localStorage.setItem('taut.fit', v ? 'on' : 'off'); setFitState(v); };
+  const [fit, setFitState] = useState(() => localStorage.getItem('tautan.fit') === 'on');
+  const setFit = (v: boolean) => { localStorage.setItem('tautan.fit', v ? 'on' : 'off'); setFitState(v); };
   const [scale, setScale] = useState(1);
   const [fade, setFade] = useState(false);
   const [fresh, setFresh] = useState(false);
@@ -193,7 +193,7 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
     measure();
   }, [fit, wrap, lines, viewportW]);
 
-  // Mark Seen once the screen settles: Seen is taut's own flag, never written to the Mux.
+  // Mark Seen once the screen settles: Seen is tautan's own flag, never written to the Mux.
   useEffect(() => {
     if (!screen) return;
     markSeen(paneKey, screen.revision);
@@ -206,7 +206,7 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
   }, [pane?.key]);
 
   // Smart replies are the phone's own switch; Settings writes it and tells the Hub too.
-  const [smart] = useState(() => localStorage.getItem('taut.smart') === 'on');
+  const [smart] = useState(() => localStorage.getItem('tautan.smart') === 'on');
 
   // The Hub drafts on a Status change, so a Pane that blocked before the switch went on
   // has none. Ask once per revision; a Hub with Smart replies off answers with the Pane

@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { HerdrMux } from '../server/herdr.ts';
 
 // A fake herdr: one request per connection, records every params object it saw.
-const socketPath = join(tmpdir(), `taut-herdr-test-${process.pid}.sock`);
+const socketPath = join(tmpdir(), `tautan-herdr-test-${process.pid}.sock`);
 const seen: Record<string, any>[] = [];
 let server: Server;
 

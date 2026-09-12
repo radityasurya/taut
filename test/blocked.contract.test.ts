@@ -5,7 +5,7 @@ import { herdrAvailable, herdrMux, herdrRpc, startThrowawayHerdr } from './harne
 
 const prompt = [
   'Bash command',
-  'echo taut-blocked',
+  'echo tautan-blocked',
   'Do you want to proceed?',
   '❯ 1. Yes',
   "2. Yes, and don't ask again…",
@@ -34,7 +34,7 @@ describe.skipIf(!herdrAvailable)('blocked flow contract', () => {
     mux = herdrMux(fixture.sock);
     const workspace = await mux.newWorkspace({ cwd: fixture.dir, label: 'blocked-contract' });
     paneId = (await mux.tree()).panes.find(pane => pane.workspaceId === workspace.id)!.id;
-    await herdrRpc(fixture.sock, 'pane.report_agent', { pane_id: paneId, source: 'taut-contract', agent: 'claude', state: 'idle' });
+    await herdrRpc(fixture.sock, 'pane.report_agent', { pane_id: paneId, source: 'tautan-contract', agent: 'claude', state: 'idle' });
     await mux.sendText(paneId, `clear; printf '%s\\n' ${quoted(prompt)}`);
     await mux.sendKeys(paneId, ['enter']);
     hub = new Hub(); hub.add('contract', mux);

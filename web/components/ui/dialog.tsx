@@ -1,5 +1,5 @@
-// shadcn Dialog (Radix), restyled onto taut's tokens. The close X and the shadcn
-// Button dependency were dropped: taut's only Dialog is a confirm, which already
+// shadcn Dialog (Radix), restyled onto tautan's tokens. The close X and the shadcn
+// Button dependency were dropped: tautan's only Dialog is a confirm, which already
 // has a Cancel button.
 import type * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';

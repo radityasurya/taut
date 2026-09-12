@@ -71,7 +71,7 @@ function HostCard({
         <p className="text-[13px] break-words text-danger">{host.error ?? 'unreachable'}</p>
       )}
 
-      {/* Retry when it is down, Edit and Remove when taut owns the entry, the source otherwise. */}
+      {/* Retry when it is down, Edit and Remove when tautan owns the entry, the source otherwise. */}
       {(!host.online || config || host.source === 'machines') && (
         <div className="-mx-1 flex items-center gap-1">
           {!host.online && (
@@ -104,7 +104,7 @@ function HostCard({
 }
 
 export function Hosts({ state }: { state: State | null }) {
-  // `hosts.json` as the Hub holds it. State says what a Host is doing; this says what taut
+  // `hosts.json` as the Hub holds it. State says what a Host is doing; this says what tautan
   // may edit, and every write sends the whole array back.
   const [hosts, setHosts] = useState<HostConfig[]>([]);
   const [edit, setEdit] = useState<HostConfig | null>(null);
@@ -354,7 +354,7 @@ export function InstallHint() {
   return (
     <p className="mx-4 mt-2 flex gap-2.5 rounded-card bg-elevated px-3 py-2.5 text-caption leading-relaxed text-muted">
       <Install className="mt-px shrink-0" />
-      On iPhone, add taut to the Home Screen from the Share menu to receive notifications.
+      On iPhone, add tautan to the Home Screen from the Share menu to receive notifications.
     </p>
   );
 }

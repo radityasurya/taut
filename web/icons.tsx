@@ -1,4 +1,4 @@
-// Every icon taut draws, lifted from docs/design/src/*.dc.html so the weights and the
+// Every icon tautan draws, lifted from docs/design/src/*.dc.html so the weights and the
 // geometry match the mockups. All 24×24, stroked with currentColor, decorative.
 import type { SVGProps } from 'react';
 

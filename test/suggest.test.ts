@@ -41,7 +41,7 @@ describe.skipIf(!canListen)('suggest adapter HTTP', () => {
       captured = request; body = await request.json();
       return Response.json({ content: [{ type: 'text', text: 'Here: [" yes "," no "," inspect logs "]' }] });
     } }); servers.push(server);
-    const adapter = configureSuggest({ TAUT_SUGGEST: 'zai', TAUT_SUGGEST_KEY: 'test-key', TAUT_SUGGEST_BASE: `http://127.0.0.1:${server.port}`, TAUT_SUGGEST_MODEL: 'test-model' })!;
+    const adapter = configureSuggest({ TAUTAN_SUGGEST: 'zai', TAUTAN_SUGGEST_KEY: 'test-key', TAUTAN_SUGGEST_BASE: `http://127.0.0.1:${server.port}`, TAUTAN_SUGGEST_MODEL: 'test-model' })!;
     expect(await adapter.suggest('visible output')).toEqual(['yes', 'no', 'inspect logs']);
     expect(new URL(captured!.url).pathname).toBe('/v1/messages');
     expect(captured!.headers.get('x-api-key')).toBe('test-key');
@@ -52,11 +52,11 @@ describe.skipIf(!canListen)('suggest adapter HTTP', () => {
 
   test('times out without throwing and warns only once', async () => {
     const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: async () => { await new Promise(() => {}); return new Response(); } }); servers.push(server);
-    const adapter = configureSuggest({ TAUT_SUGGEST: 'anthropic', TAUT_SUGGEST_KEY: 'test-key', TAUT_SUGGEST_BASE: `http://127.0.0.1:${server.port}` }, { timeoutMs: 20 })!;
+    const adapter = configureSuggest({ TAUTAN_SUGGEST: 'anthropic', TAUTAN_SUGGEST_KEY: 'test-key', TAUTAN_SUGGEST_BASE: `http://127.0.0.1:${server.port}` }, { timeoutMs: 20 })!;
     const original = console.warn; const warnings: unknown[][] = []; console.warn = (...args) => { warnings.push(args); };
     try { expect(await adapter.suggest('one')).toEqual([]); expect(await adapter.suggest('two')).toEqual([]); } finally { console.warn = original; }
     expect(warnings).toHaveLength(1);
-    expect(String(warnings[0]![0])).toMatch(/^taut: suggest failed \(anthropic\): /);
+    expect(String(warnings[0]![0])).toMatch(/^tautan: suggest failed \(anthropic\): /);
   });
 });
 
@@ -65,7 +65,7 @@ describe('Hub suggestion trigger', () => {
     const pane: Pane = { id: 'p', tabId: 't', workspaceId: 'w', title: 'Agent', agent: 'codex', status: 'working', revision: 7 };
     let requests = 0;
     const suggest: SuggestAdapter = { provider: 'zai', model: 'fake', suggest: async () => { requests++; return ['Continue']; } };
-    const old = process.env.XDG_STATE_HOME; process.env.XDG_STATE_HOME = mkdtempSync(join(tmpdir(), 'taut-suggest-'));
+    const old = process.env.XDG_STATE_HOME; process.env.XDG_STATE_HOME = mkdtempSync(join(tmpdir(), 'tautan-suggest-'));
     const hub = new Hub({ refreshMs: 0, suggest }); hub.add('local', fakeMux(pane));
     try {
       await hub.state(); hub.setSuggestEnabled(true); pane.status = 'blocked';
@@ -80,7 +80,7 @@ describe('Hub suggestion trigger', () => {
     const pane: Pane = { id: 'p', tabId: 't', workspaceId: 'w', title: 'Agent', agent: 'codex', status: 'blocked', revision: 1 };
     let requests = 0;
     const suggest: SuggestAdapter = { provider: 'zai', model: 'fake', suggest: async () => { requests++; return []; } };
-    const old = process.env.XDG_STATE_HOME; process.env.XDG_STATE_HOME = mkdtempSync(join(tmpdir(), 'taut-suggest-off-'));
+    const old = process.env.XDG_STATE_HOME; process.env.XDG_STATE_HOME = mkdtempSync(join(tmpdir(), 'tautan-suggest-off-'));
     const hub = new Hub({ refreshMs: 0, suggest }); hub.add('local', fakeMux(pane));
     try { await hub.state(); await hub.refreshHost('local'); await Bun.sleep(0); expect(requests).toBe(0); }
     finally { hub.close(); if (old === undefined) delete process.env.XDG_STATE_HOME; else process.env.XDG_STATE_HOME = old; }
@@ -91,7 +91,7 @@ describe('Hub suggestion trigger', () => {
     const suggest: SuggestAdapter = { provider: 'zai', model: 'fake', suggest: async () => { requests++; return ['Continue']; } };
     const old = process.env.XDG_STATE_HOME;
 
-    process.env.XDG_STATE_HOME = mkdtempSync(join(tmpdir(), 'taut-suggest-force-'));
+    process.env.XDG_STATE_HOME = mkdtempSync(join(tmpdir(), 'tautan-suggest-force-'));
     const pane: Pane = { id: 'p', tabId: 't', workspaceId: 'w', title: 'Agent', agent: 'codex', status: 'working', revision: 3 };
     const hub = new Hub({ refreshMs: 0, suggest }); hub.add('local', fakeMux(pane));
     try {
@@ -102,7 +102,7 @@ describe('Hub suggestion trigger', () => {
       expect(requests).toBe(1);
     } finally { hub.close(); }
 
-    process.env.XDG_STATE_HOME = mkdtempSync(join(tmpdir(), 'taut-suggest-force-off-'));
+    process.env.XDG_STATE_HOME = mkdtempSync(join(tmpdir(), 'tautan-suggest-force-off-'));
     const offPane: Pane = { id: 'p', tabId: 't', workspaceId: 'w', title: 'Agent', agent: 'codex', status: 'blocked', revision: 1 };
     const offHub = new Hub({ refreshMs: 0, suggest }); offHub.add('local', fakeMux(offPane));
     try {

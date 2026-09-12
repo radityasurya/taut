@@ -1,4 +1,4 @@
-// shadcn Drawer (vaul), restyled onto taut's tokens: --elevated surface, 16 px top
+// shadcn Drawer (vaul), restyled onto tautan's tokens: --elevated surface, 16 px top
 // radius, grab handle, safe-area bottom padding. Only the direction the app uses
 // (bottom) is styled; vaul's other directions were dropped with the shadcn defaults.
 import type * as React from 'react';

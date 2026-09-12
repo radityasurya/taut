@@ -14,13 +14,13 @@ export function sanitizeName(raw: string | null): string {
 }
 
 export function remoteAttachmentCommand(name: string): string {
-  return `mkdir -p ~/.cache/taut/attachments && cat > ~/.cache/taut/attachments/'${sanitizeName(name)}'`;
+  return `mkdir -p ~/.cache/tautan/attachments && cat > ~/.cache/tautan/attachments/'${sanitizeName(name)}'`;
 }
 
 export function remoteAttachmentResult(target: string, name: string, bytes: number): AttachResult {
-  const display = `~/.cache/taut/attachments/${sanitizeName(name)}`;
+  const display = `~/.cache/tautan/attachments/${sanitizeName(name)}`;
   const user = target.includes('@') ? target.slice(0, target.indexOf('@')) : '';
-  return { path: user ? `/home/${user}/.cache/taut/attachments/${sanitizeName(name)}` : display, bytes, display };
+  return { path: user ? `/home/${user}/.cache/tautan/attachments/${sanitizeName(name)}` : display, bytes, display };
 }
 
 export async function writeAttachment(hostId: string, name: string, body: ReadableStream<Uint8Array>, capBytes: number, target?: string, spawn: typeof Bun.spawn = Bun.spawn): Promise<AttachResult> {
@@ -40,12 +40,12 @@ export async function writeAttachment(hostId: string, name: string, body: Readab
       return remoteAttachmentResult(target, name, bytes);
     } catch (error) {
       child.stdin.end(); child.kill(); await child.exited.catch(() => {});
-      const cleanup = spawn(['ssh', '-o', 'BatchMode=yes', target, `rm -f ~/.cache/taut/attachments/'${sanitizeName(name)}'`], { stdout: 'ignore', stderr: 'ignore' });
+      const cleanup = spawn(['ssh', '-o', 'BatchMode=yes', target, `rm -f ~/.cache/tautan/attachments/'${sanitizeName(name)}'`], { stdout: 'ignore', stderr: 'ignore' });
       await cleanup.exited.catch(() => {}); throw error;
     }
   }
   const home = os.homedir();
-  const directory = join(process.env.XDG_CACHE_HOME || join(home, '.cache'), 'taut/attachments');
+  const directory = join(process.env.XDG_CACHE_HOME || join(home, '.cache'), 'tautan/attachments');
   await mkdir(directory, { recursive: true });
   const path = join(directory, `${Date.now()}-${name}`);
   const file = await open(path, 'wx');

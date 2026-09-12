@@ -15,7 +15,7 @@ const dist = fileURLToPath(new URL('./dist/web', import.meta.url));
  */
 function swPrecache() {
   return {
-    name: 'taut-sw-precache',
+    name: 'tautan-sw-precache',
     apply: 'build' as const,
     closeBundle() {
       const sw = join(dist, 'sw.js');

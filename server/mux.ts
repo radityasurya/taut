@@ -48,7 +48,7 @@ export class Hub {
   constructor(opts: { refreshMs?: number; suggest?: SuggestAdapter | null } = {}) {
     this.refreshMs = opts.refreshMs ?? 15_000;
     const root = process.env.XDG_STATE_HOME || join(os.homedir(), '.local/state');
-    this.statePath = join(root, 'taut/state.json');
+    this.statePath = join(root, 'tautan/state.json');
     let stored: StoredState = { seen: {} };
     try { stored = JSON.parse(readFileSync(this.statePath, 'utf8')); } catch {}
     this.seen = stored.seen ?? {};
@@ -173,7 +173,7 @@ export class Hub {
         if (previous?.status !== pane.status && this.suggestEnabled && this.suggestAdapter && pane.agent && (pane.status === 'blocked' || pane.status === 'done'))
           this.suggestionTriggers.add(requestKey);
         if (pane.status === 'blocked' && previous?.status !== 'blocked') {
-          console.log(`taut: ${key} → blocked`);
+          console.log(`tautan: ${key} → blocked`);
           const workspace = entry.tree.workspaces.find(item => item.id === pane.workspaceId);
           const payload = JSON.stringify({
             title: `${pane.agent?.trim() || 'Agent'} needs you`,
@@ -183,8 +183,8 @@ export class Hub {
           // ponytail: independent sends are enough until subscription counts become large.
           for (const subscription of [...this.subscriptions]) void sendPush(subscription, payload, this.vapid).then(response => {
             if (response.status === 404 || response.status === 410) this.removeSubscription(subscription.endpoint);
-            else if (!response.ok) console.warn(`taut: push ${response.status} ${subscription.endpoint}`);
-          }).catch(error => console.warn(`taut: push failed ${subscription.endpoint}`, error));
+            else if (!response.ok) console.warn(`tautan: push ${response.status} ${subscription.endpoint}`);
+          }).catch(error => console.warn(`tautan: push failed ${subscription.endpoint}`, error));
         }
         const status = previous?.status === pane.status ? previous : { status: pane.status, at: Date.now() };
         this.statuses.set(key, status);
@@ -253,7 +253,7 @@ export class Hub {
 
   // ponytail: the write already happened; a failed receipt must not trigger a duplicate Retry.
   private async refreshAfterWrite(muxKey: string): Promise<void> {
-    try { await this.refresh(muxKey); } catch (error) { console.warn(`taut: refresh after write failed for ${muxKey}`, error); }
+    try { await this.refresh(muxKey); } catch (error) { console.warn(`tautan: refresh after write failed for ${muxKey}`, error); }
   }
 
   private resolve(paneKey: string): { muxKey: string; paneId: string; entry: Entry } | undefined {

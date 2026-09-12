@@ -84,7 +84,7 @@ Verify: trigger a permission prompt in a real Pane; the card shows buttons; a ta
       `Authorization` header and pruning a subscription the push service answers with 410
 - [x] `web/public/sw.js`, `manifest.webmanifest`, install hint on iOS — the worker shows
       the notification, routes the tap and caches the shell from the `self.__PRECACHE`
-      list that the `taut-sw-precache` plugin in `vite.config.ts` stamps into it;
+      list that the `tautan-sw-precache` plugin in `vite.config.ts` stamps into it;
       `web/push.ts` subscribes and `web/settings.tsx` owns the toggle and the install hint
 - [x] Push only on Status → `blocked`; app badge for unseen `blocked` + `done` —
       `server/mux.ts` sends on the transition only; `web/app.tsx` writes the badge from
@@ -106,10 +106,10 @@ Verify: installed PWA on iPhone and Android receives a notification; tapping ope
       out and aborted an upload in flight, Send cleared both, and an empty file showed
       `empty file` with Retry. `test/attach.test.ts` covers the Hub route. A real photo
       from a real phone, and the HEIC → JPEG hand-off (see UI.md), are pending
-- [ ] Remote Hosts: stream into `ssh target 'cat > ~/.cache/taut/…'` — needs the SSH
+- [ ] Remote Hosts: stream into `ssh target 'cat > ~/.cache/tautan/…'` — needs the SSH
       forwarders of phase 5
 
-Verify: a photo from the phone lands in `~/.cache/taut/` on the Host and the agent reads it.
+Verify: a photo from the phone lands in `~/.cache/tautan/` on the Host and the agent reads it.
 
 ## Phase 4b — grid width and quick replies
 
@@ -136,7 +136,7 @@ Verify: a photo from the phone lands in `~/.cache/taut/` on the Host and the age
 
 Verify: on the desktop browser a 120-column pane renders at 12 px with no sideways scroll;
 on the phone a blocked Claude Code pane offers Yes/No plus three sensible replies.
-Verified 2026-09-12: a throwaway Hub on 7716 with `TAUT_SUGGEST=zai` answered
+Verified 2026-09-12: a throwaway Hub on 7716 with `TAUTAN_SUGGEST=zai` answered
 `POST /api/panes/:key/suggest` with HTTP 200 and three pills from glm-5.2.
 
 ## Phase 5 — remote Hosts
@@ -213,7 +213,7 @@ Phone and desktop screenshots against a throwaway Hub on 7718 with a throwaway h
 
 ## Phase 9 — ship
 
-- [ ] `Dockerfile` (`oven/bun`), README install paths (`bunx taut`, systemd, Docker on Unraid)
+- [ ] `Dockerfile` (`oven/bun`), README install paths (`bunx tautan`, systemd, Docker on Unraid)
 - [ ] `npm publish`
 
 ## Later (explicitly out of v1)

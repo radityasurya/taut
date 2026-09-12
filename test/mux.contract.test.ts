@@ -20,7 +20,7 @@ describe.skipIf(!herdrAvailable)('HerdrMux contract', () => {
   beforeAll(async () => {
     fixture = await startThrowawayHerdr();
     mux = herdrMux(fixture.sock);
-    const workspace = await mux.newWorkspace({ cwd: fixture.dir, label: 'taut-contract' });
+    const workspace = await mux.newWorkspace({ cwd: fixture.dir, label: 'tautan-contract' });
     workspaceId = workspace.id;
     paneId = (await mux.tree()).panes.find(pane => pane.workspaceId === workspaceId)!.id;
   }, 15_000);
@@ -32,10 +32,10 @@ describe.skipIf(!herdrAvailable)('HerdrMux contract', () => {
   });
 
   test('sendText and sendKeys reach the visible screen', async () => {
-    await mux.sendText(paneId, 'echo taut-ok');
+    await mux.sendText(paneId, 'echo tautan-ok');
     await mux.sendKeys(paneId, ['enter']);
-    const screen = await eventually(() => mux.read(paneId, 'visible'), value => value.text.includes('taut-ok'), 5_000);
-    expect(screen.text).toContain('taut-ok');
+    const screen = await eventually(() => mux.read(paneId, 'visible'), value => value.text.includes('tautan-ok'), 5_000);
+    expect(screen.text).toContain('tautan-ok');
   });
 
   test('onChange fires after a send', async () => {
@@ -58,7 +58,7 @@ describe.skipIf(!herdrAvailable)('HerdrMux contract', () => {
     // A plain `echo` never touches PaneInfo, so herdr never emits `pane.updated` for it.
     // Set the terminal title instead: that's a real send through the same pty, and it's
     // the same OSC mechanism agent CLIs use to report status, which is what onChange exists for.
-    await mux.sendText(paneId, "printf '\\033]0;taut-change\\007'");
+    await mux.sendText(paneId, "printf '\\033]0;tautan-change\\007'");
     await mux.sendKeys(paneId, ['enter']);
     await changed;
   });
@@ -101,11 +101,11 @@ describe.skipIf(!herdrAvailable)('HerdrMux contract', () => {
 
     const repo = join(fixture.dir, 'repo');
     await mkdir(repo);
-    for (const args of [['git', 'init'], ['git', 'config', 'user.email', 'taut@example.test'], ['git', 'config', 'user.name', 'Taut'], ['git', 'commit', '--allow-empty', '-m', 'init']]) {
+    for (const args of [['git', 'init'], ['git', 'config', 'user.email', 'tautan@example.test'], ['git', 'config', 'user.name', 'Tautan'], ['git', 'commit', '--allow-empty', '-m', 'init']]) {
       const child = Bun.spawn(args, { cwd: repo, stdout: 'pipe', stderr: 'pipe' });
       expect(await child.exited).toBe(0);
     }
-    const worktree = await mux.newWorkspace({ cwd: repo, branch: 'taut-wt', label: 'worktree-workspace' });
+    const worktree = await mux.newWorkspace({ cwd: repo, branch: 'tautan-wt', label: 'worktree-workspace' });
     expect((await mux.tree()).workspaces.find(item => item.id === worktree.id)?.label).toBe('worktree-workspace');
     expect(worktree.cwd).toBeTruthy();
     expect((await stat(worktree.cwd!)).isDirectory()).toBe(true);

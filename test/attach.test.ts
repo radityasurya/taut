@@ -19,9 +19,9 @@ const canListen = (() => {
 describe.skipIf(!canListen)('pane attachments', () => {
   const oldCacheHome = process.env.XDG_CACHE_HOME;
   const oldStateHome = process.env.XDG_STATE_HOME;
-  const oldMax = process.env.TAUT_MAX_ATTACHMENT_MB;
-  const cacheHome = mkdtempSync(join(tmpdir(), 'taut-attach-'));
-  const attachmentDir = join(cacheHome, 'taut/attachments');
+  const oldMax = process.env.TAUTAN_MAX_ATTACHMENT_MB;
+  const cacheHome = mkdtempSync(join(tmpdir(), 'tautan-attach-'));
+  const attachmentDir = join(cacheHome, 'tautan/attachments');
   const paneKey = `${hostId}/fake/pane`;
   let server: ReturnType<typeof Bun.serve>;
   let hub: Hub;
@@ -36,7 +36,7 @@ describe.skipIf(!canListen)('pane attachments', () => {
     process.env.XDG_CACHE_HOME = cacheHome;
     process.env.XDG_STATE_HOME = cacheHome;
     const tree: Tree = {
-      workspaces: [{ id: 'work', label: 'Taut' }], tabs: [{ id: 'tab', workspaceId: 'work', label: 'Tab' }],
+      workspaces: [{ id: 'work', label: 'Tautan' }], tabs: [{ id: 'tab', workspaceId: 'work', label: 'Tab' }],
       panes: [{ id: 'pane', tabId: 'tab', workspaceId: 'work', title: 'Pane', status: 'working', revision: 1 }],
     };
     const mux: Mux = {
@@ -55,7 +55,7 @@ describe.skipIf(!canListen)('pane attachments', () => {
     server?.stop(); hub?.close();
     if (oldCacheHome === undefined) delete process.env.XDG_CACHE_HOME; else process.env.XDG_CACHE_HOME = oldCacheHome;
     if (oldStateHome === undefined) delete process.env.XDG_STATE_HOME; else process.env.XDG_STATE_HOME = oldStateHome;
-    if (oldMax === undefined) delete process.env.TAUT_MAX_ATTACHMENT_MB; else process.env.TAUT_MAX_ATTACHMENT_MB = oldMax;
+    if (oldMax === undefined) delete process.env.TAUTAN_MAX_ATTACHMENT_MB; else process.env.TAUTAN_MAX_ATTACHMENT_MB = oldMax;
   });
 
   test('sanitizes attachment names', () => {
@@ -73,7 +73,7 @@ describe.skipIf(!canListen)('pane attachments', () => {
     const response = await post(paneKey, { headers: { 'x-name': 'a b/../c.png' }, body });
     expect(response.status).toBe(200);
     const result = await response.json() as AttachResult;
-    expect(result.path).toMatch(/\/taut\/attachments\/\d{13}-c\.png$/);
+    expect(result.path).toMatch(/\/tautan\/attachments\/\d{13}-c\.png$/);
     expect(result.bytes).toBe(size);
     expect(statSync(result.path).size).toBe(size);
     // This test uses an OS tmpdir, outside the user's home, so display remains absolute.
@@ -82,7 +82,7 @@ describe.skipIf(!canListen)('pane attachments', () => {
   });
 
   test('rejects declared and streamed bodies over the cap without partial files', async () => {
-    process.env.TAUT_MAX_ATTACHMENT_MB = '1';
+    process.env.TAUTAN_MAX_ATTACHMENT_MB = '1';
     const body = new Uint8Array(2 * 1024 * 1024);
     let response = await post(paneKey, { body });
     expect(response.status).toBe(413); expect(files()).toHaveLength(0);
@@ -92,7 +92,7 @@ describe.skipIf(!canListen)('pane attachments', () => {
     });
     response = await post(paneKey, { body: stream, duplex: 'half' } as RequestInit & { duplex: 'half' });
     expect(response.status).toBe(413); expect(files()).toHaveLength(0);
-    delete process.env.TAUT_MAX_ATTACHMENT_MB;
+    delete process.env.TAUTAN_MAX_ATTACHMENT_MB;
   });
 
   test('enforces origin, pane existence, and non-empty bodies', async () => {

@@ -42,14 +42,14 @@ export function Dot({ status, seen, size = 8 }: { status: Status; seen?: boolean
 }
 
 // ---- seen ----
-// taut's own flag, never written back to the Mux. One revision map, read through a module cache.
+// tautan's own flag, never written back to the Mux. One revision map, read through a module cache.
 
 let seenAt: Record<string, number> | null = null;
-const seen = () => (seenAt ??= JSON.parse(localStorage.getItem('taut.seen') ?? '{}') as Record<string, number>);
+const seen = () => (seenAt ??= JSON.parse(localStorage.getItem('tautan.seen') ?? '{}') as Record<string, number>);
 
 export function markSeen(key: string, revision: number) {
   seen()[key] = revision;
-  localStorage.setItem('taut.seen', JSON.stringify(seen()));
+  localStorage.setItem('tautan.seen', JSON.stringify(seen()));
 }
 
 /** Seed a new device from its first snapshot. Blocked remains actionable regardless. */
@@ -57,7 +57,7 @@ export function seedSeen(panes: StatePane[]) {
   const current = seen();
   if (Object.keys(current).length) return;
   for (const pane of panes) current[pane.key] = pane.revision;
-  localStorage.setItem('taut.seen', JSON.stringify(current));
+  localStorage.setItem('tautan.seen', JSON.stringify(current));
 }
 
 /**
@@ -79,7 +79,7 @@ export function timeAgo(at?: number): string {
 
 const RANK: Record<Status, number> = { blocked: 0, working: 1, done: 2, idle: 3, unknown: 4 };
 const basename = (cwd?: string) => cwd?.replace(/\/+$/, '').split('/').pop();
-/** `~/projects/taut` → `~/projects`: where a sibling Workspace would go. */
+/** `~/projects/tautan` → `~/projects`: where a sibling Workspace would go. */
 export const parentDir = (cwd?: string) => cwd?.replace(/\/+$/, '').replace(/\/[^/]+$/, '') || undefined;
 
 /** The Agent most of these Panes run, `''` when none does: the New Tab chip to preselect. */
@@ -191,7 +191,7 @@ function GroupHeader({
 
 // ---- screen ----
 
-const COLLAPSED = 'taut.collapsed';
+const COLLAPSED = 'tautan.collapsed';
 const readCollapsed = (): string[] => JSON.parse(localStorage.getItem(COLLAPSED) ?? '[]') as string[];
 
 export function Home({ state }: { state: State | null }) {
@@ -227,7 +227,7 @@ export function Home({ state }: { state: State | null }) {
     (state?.panes ?? []).filter((p) => p.muxKey === w.muxKey && p.workspaceId === w.id).sort((a, b) => RANK[a.status] - RANK[b.status]);
 
   const visible = (muxKey: string) => !host || hostOf(muxKey) === host;
-  /** Only herdr writes. tmux answers 501, so taut never offers the action. */
+  /** Only herdr writes. tmux answers 501, so tautan never offers the action. */
   const writable = (muxKey?: string) => state?.muxes.find((m) => m.key === muxKey)?.kind === 'herdr';
   const needsYou = (state?.panes ?? []).filter((p) => visible(p.muxKey) && unseen(p) && (p.status === 'blocked' || p.status === 'done'));
   const groups = (state?.workspaces ?? [])
@@ -269,7 +269,7 @@ export function Home({ state }: { state: State | null }) {
   return (
     <div className="mx-auto max-w-2xl pt-[env(safe-area-inset-top)] pb-28">
       <TopBar
-        title="taut"
+        title="tautan"
         right={
           <>
           <span className="mr-1.5 text-caption tabular-nums text-muted">{counts}</span>

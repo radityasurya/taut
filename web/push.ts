@@ -2,11 +2,11 @@
  * Web Push and the app badge (phase 3).
  *
  * The intent ("the user asked for notifications") lives in `localStorage` under
- * `taut.push`; the subscription itself lives on the Hub in `state.json`. The Hub has no
+ * `tautan.push`; the subscription itself lives on the Hub in `state.json`. The Hub has no
  * `PUT /api/settings`, so nothing here rides on the settings endpoint.
  */
 
-const INTENT = 'taut.push';
+const INTENT = 'tautan.push';
 
 export type PushResult = { ok: true } | { ok: false; reason: 'denied' | 'unsupported' | 'error'; message: string };
 

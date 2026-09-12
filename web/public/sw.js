@@ -1,10 +1,10 @@
-// taut's service worker: push notifications plus a one-shell offline cache.
+// tautan's service worker: push notifications plus a one-shell offline cache.
 // Plain JS, copied to dist/web as-is. `pnpm build` prepends `self.__VERSION` and
-// `self.__PRECACHE` (see the `taut-sw-precache` plugin in vite.config.ts).
-// ponytail: hand-written instead of workbox; taut caches one shell and three route rules.
+// `self.__PRECACHE` (see the `tautan-sw-precache` plugin in vite.config.ts).
+// ponytail: hand-written instead of workbox; tautan caches one shell and three route rules.
 
 const VERSION = self.__VERSION || 'dev';
-const CACHE = `taut-${VERSION}`;
+const CACHE = `tautan-${VERSION}`;
 const PRECACHE = self.__PRECACHE || []; // empty in dev (`?sw`), where the build never ran
 
 self.addEventListener('install', (event) => {
@@ -28,7 +28,7 @@ self.addEventListener('push', (event) => {
   try { data = event.data.json(); } catch { /* a payload we cannot read still deserves a notification */ }
   event.waitUntil(
     (async () => {
-      await self.registration.showNotification(data.title || 'taut', {
+      await self.registration.showNotification(data.title || 'tautan', {
         body: data.body,
         tag: data.tag,
         data: { url: data.url || '/' },

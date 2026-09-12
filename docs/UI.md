@@ -1,4 +1,4 @@
-# taut UI, as built
+# tautan UI, as built
 
 One section per screen: what it renders today, which file owns it, and the
 behaviour worth knowing. Reasoning lives in [DESIGN.md](./DESIGN.md), mockups
@@ -45,17 +45,17 @@ Four movements, all in `web/theme.css`, all off under
 
 Colours come from `data-theme` on `<html>`: seven themes, each defining the
 chrome tokens plus 16 ANSI colours (`web/theme.css`). shadcn's variable names
-are aliased onto taut's tokens in the same file; `--border` is deliberately not
-aliased, because taut already owns that name and the alias would be a cycle.
+are aliased onto tautan's tokens in the same file; `--border` is deliberately not
+aliased, because tautan already owns that name and the alias would be a cycle.
 
-Mono text uses `web/public/taut-box.woff2`: 8,976 bytes, 372 glyphs, subset
+Mono text uses `web/public/tautan-box.woff2`: 8,976 bytes, 372 glyphs, subset
 from DejaVu Sans Mono with `pyftsubset` (no Nerd Font on this machine). Its
 `unicode-range` covers box drawing, blocks, Braille, arrows, geometric shapes
 and the check/cross agents print; the rest falls through to the system stack.
 
 ## Agents (`#/`) — `web/home.tsx`
 
-The screen title is `taut`, with `<hosts> · <panes>` counts and a `+` that
+The screen title is `tautan`, with `<hosts> · <panes>` counts and a `+` that
 opens New Workspace. Host chips appear under the header only when there is
 more than one Host.
 
@@ -95,7 +95,7 @@ between the Tabs. When the open Tab holds several Panes, a chip row lists them.
 The grid renders the `visible` screen as styled ANSI spans, pinned to the
 bottom until you scroll up, when a **New output** pill appears. Content wider
 than the phone fades at the right edge instead of showing a scrollbar. There is
-no Screen/Recent switch: taut only ever shows the visible grid, and Wrap (in
+no Screen/Recent switch: tautan only ever shows the visible grid, and Wrap (in
 More) reflows it client-side.
 
 **Width.** From `lg` up the Pane column is the whole window (`max-w-none`), so
@@ -110,10 +110,10 @@ Wrap reflows the same text to the column, never wider than the Pane's own
 
 | Setting | Default | Key |
 |---|---|---|
-| Fit | off | `taut.fit` = `on` \| `off` |
-| Wrap, agent Panes | on | `taut.wrap.agent` = `on` \| `off` |
-| Wrap, shell Panes | off | `taut.wrap.shell` = `on` \| `off` |
-| Smart replies | off | `taut.smart` = `on` \| `off` |
+| Fit | off | `tautan.fit` = `on` \| `off` |
+| Wrap, agent Panes | on | `tautan.wrap.agent` = `on` \| `off` |
+| Wrap, shell Panes | off | `tautan.wrap.shell` = `on` \| `off` |
+| Smart replies | off | `tautan.smart` = `on` \| `off` |
 
 Wrap is remembered per kind, not per Pane: agent output is prose and wants
 reflowing, a shell Pane is htop and logs, where the columns are the layout.
@@ -157,7 +157,7 @@ Continue. A draft that repeats a static reply is listed once, as the draft.
 
 A text pill is a draft, not an answer: it lands in the composer for review and
 never sends, appended after what you have already typed, like dictation. Drafts
-appear only while **Smart replies** is on (`taut.smart`); a blocked Pane with no
+appear only while **Smart replies** is on (`tautan.smart`); a blocked Pane with no
 drafts for the current revision asks the Hub for one, once, with
 `POST /api/panes/:key/suggest`.
 
@@ -183,7 +183,7 @@ text and every chip that is not still uploading. `?mock` swaps in a small
 `XMLHttpRequest` stand-in that ticks progress three times and answers from the
 fake Hub.
 
-**HEIC.** iOS hands a Photos pick to the page as JPEG, so taut needs no HEIC
+**HEIC.** iOS hands a Photos pick to the page as JPEG, so tautan needs no HEIC
 decoder. A reproduction on iOS tried ten `accept` values, from empty through
 `image/*` and `image/heic` to explicit lists, and got a JPEG every time, in
 Safari, Chrome, Firefox and Edge alike: the conversion lives in iOS WebKit
@@ -304,7 +304,7 @@ have (`Permission denied (publickey)`), so no test can run it.
    `herdr session list --json` on this machine reports it; otherwise fill in the
    **herdr Mux** field yourself.
 4. Expect the card online, and its Panes on the Agents screen.
-5. `pkill -f 'ssh -N.*taut'`. The card goes offline, then comes back on the
+5. `pkill -f 'ssh -N.*tautan'`. The card goes offline, then comes back on the
    1 s → 30 s backoff, which resets after 60 s of a stable connection.
 6. Stop the throwaway herdr.
 
@@ -320,9 +320,9 @@ rows. Hosts live on their own tab, not here.
 
 **Smart replies** reads `GET /api/settings`. With a provider configured the hint
 is `provider · model` (`zai · glm-5.2`); with none it reads `not configured ·
-set TAUT_SUGGEST on the Hub` and the switch is disabled, because there is
+set TAUTAN_SUGGEST on the Hub` and the switch is disabled, because there is
 nothing to turn on. The state is the **and** of both sides — the Hub's
-`suggest.enabled` and this phone's `taut.smart` — and the switch writes both:
+`suggest.enabled` and this phone's `tautan.smart` — and the switch writes both:
 `localStorage` for the pills, `POST /api/settings/suggest {enabled}` for the
 drafting. One rule, so a phone that turned it off never shows drafts and a Hub
 that never drafts cannot be switched on from one phone only. Under the row, one
@@ -333,7 +333,7 @@ The push toggle is the only control with a failure state, so it has five:
 
 | State | What you see |
 |---|---|
-| Off | The plain switch. `taut.push` in `localStorage` is `0` or absent |
+| Off | The plain switch. `tautan.push` in `localStorage` is `0` or absent |
 | On | The switch is on. The browser holds a subscription and the Hub has its endpoint |
 | Denied | The switch flips back and a muted caption reads "Notifications are blocked for this site. Allow them in your browser settings, then turn this on again." |
 | Unsupported | The same caption pattern: "This browser does not support push notifications." |
@@ -357,7 +357,7 @@ to lock to, or `null` to unlock — and the row is repainted from a fresh
 `GET /api/settings` afterwards, because only the Hub knows which header it saw.
 **Lock to this login** is disabled with no Login, since there would be nothing
 to lock to, and the Hub refuses any value other than the one the request itself
-carries: a 400 prints one `--danger` line saying to open taut through
+carries: a 400 prints one `--danger` line saying to open tautan through
 `tailscale serve` and try again. Locking the Hub to a login you cannot present
 would lock you out, so neither side allows it.
 
@@ -403,7 +403,7 @@ payload again: `body` is "Check the name and the directory", `unsupported` is
 gone Mux or Pane says so, and anything else is "That did not work · `<code>`".
 No toast, like the push toggle's caption.
 
-A `tmux` Mux answers 501 to all four, so taut does not offer them: the Tab
+A `tmux` Mux answers 501 to all four, so tautan does not offer them: the Tab
 strip `+`, **New Tab**, **Rename** and **Close Pane** are absent there, and the
 Agents header `+` needs one herdr Mux to appear. Collapse, Wrap and every read
 stay. A Tab has no menu of its own yet, so Tab rename is unreachable from the

@@ -27,7 +27,7 @@ describe.skipIf(!tmuxAvailable)('TmuxMux contract', () => {
   };
 
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'taut-tmux-'));
+    dir = await mkdtemp(join(tmpdir(), 'tautan-tmux-'));
     sock = join(dir, 't.sock');
     const proc = Bun.spawn(['tmux', '-f', '/dev/null', '-S', sock, 'new', '-d', '-s', 't', '-x', '80', '-y', '24', 'exec sh'], { stdout: 'pipe', stderr: 'pipe' });
     expect(await proc.exited).toBe(0);
@@ -54,11 +54,11 @@ describe.skipIf(!tmuxAvailable)('TmuxMux contract', () => {
   });
 
   test('text and keys reach visible and recent screens', async () => {
-    await mux.sendText(paneId, 'echo taut-ok'); await mux.sendKeys(paneId, ['enter']);
-    const visible = await eventually(() => mux.read(paneId, 'visible'), value => value.text.includes('taut-ok'), 5_000);
-    expect(visible).toMatchObject({ ansi: true }); expect(visible.text).toContain('taut-ok');
+    await mux.sendText(paneId, 'echo tautan-ok'); await mux.sendKeys(paneId, ['enter']);
+    const visible = await eventually(() => mux.read(paneId, 'visible'), value => value.text.includes('tautan-ok'), 5_000);
+    expect(visible).toMatchObject({ ansi: true }); expect(visible.text).toContain('tautan-ok');
     const recent = await mux.read(paneId, 'recent');
-    expect(recent).toMatchObject({ ansi: false }); expect(recent.text).toContain('taut-ok');
+    expect(recent).toMatchObject({ ansi: false }); expect(recent.text).toContain('tautan-ok');
   });
 
   test('onChange fires after a send to a watched pane', async () => {
