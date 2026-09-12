@@ -214,7 +214,7 @@ Phone and desktop screenshots against a throwaway Hub on 7718 with a throwaway h
 ## Phase 9 — ship
 
 - [x] `Dockerfile` (`oven/bun`), README install paths (`bunx tautan`, systemd, Docker on Unraid)
-- [ ] `npm publish` — first release is manual (`npm login && npm publish`), then trusted publishing on every tag
+- [x] `npm publish` — 0.1.0 published by hand; `release.yml` is the trusted publisher for later tags
 
 Verify: `docker compose up -d` on a second machine; the phone reaches the containerised Hub
 over `tailscale serve` and lists the host's real Panes.
