@@ -214,7 +214,7 @@ Phone and desktop screenshots against a throwaway Hub on 7718 with a throwaway h
 ## Phase 9 — ship
 
 - [x] `Dockerfile` (`oven/bun`), README install paths (`bunx tautan`, systemd, Docker on Unraid)
-- [ ] `npm publish` — needs `git tag v0.1.0` and an `NPM_TOKEN` repository secret
+- [ ] `npm publish` — first release is manual (`npm login && npm publish`), then trusted publishing on every tag
 
 Verify: `docker compose up -d` on a second machine; the phone reaches the containerised Hub
 over `tailscale serve` and lists the host's real Panes.
@@ -222,7 +222,7 @@ Evidence: `Dockerfile` (multi-stage `oven/bun:1-alpine`, non-root `tautan` uid 1
 under `/data`, healthcheck on `/api/state`), `compose.yaml` (`network_mode: host`,
 `TAUTAN_BIND=127.0.0.1`, the herdr socket and `~/.ssh` read-only, `tautan-data:/data`),
 `.github/workflows/release.yml` (on `v*`: image to `ghcr.io` as `{{version}}` and `latest`,
-npm publish with `--provenance` when the `NPM_TOKEN` secret exists, GitHub release with
+npm publish with `--provenance` through trusted publishing (OIDC, no secret), GitHub release with
 generated notes), README "Install" with the three paths and the Unraid template, and
 `CHANGELOG.md` 0.1.0.
 
