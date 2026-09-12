@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1 — 2026-09-12
+
+Release process only; the app is unchanged from 0.1.0.
+
+- npm releases go through trusted publishing: the release workflow is registered on npmjs.com
+  as the package's publisher and signs each release with provenance. No token, no secret.
+- The workflow skips the npm step when the tagged version is already on the registry, so a
+  re-run or a hand-published version never fails the release.
+
 ## 0.1.0 — 2026-09-12
 
 First release. Run one Hub on an always-on machine, open it on your phone over Tailscale,
