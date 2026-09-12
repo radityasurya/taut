@@ -139,3 +139,11 @@ export const Install = (p: Props) => (
     <path d="M7.5 10.5H6A1.5 1.5 0 0 0 4.5 12v6.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V12a1.5 1.5 0 0 0-1.5-1.5h-1.5" />
   </Icon>
 );
+
+/** The keys trigger in the dock: a key bar folded into one 24×24 cap. */
+export const Keyboard = (p: Props) => (
+  <Icon {...p}>
+    <rect x="2.5" y="6" width="19" height="12" rx="2" />
+    <path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M6.5 14h11" />
+  </Icon>
+);

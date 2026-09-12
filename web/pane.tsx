@@ -7,13 +7,77 @@ import type {
 import { api, haptic, navigate, opensWith, post } from './app.tsx';
 import { Blocked } from './blocked.tsx';
 import { commonAgent, Dot, markSeen, statusText } from './home.tsx';
-import { Attach, Back, Down, Mic, More, Plus, Send, Speaker, Switch2 } from './icons.tsx';
+import { Attach, Back, ChevronDown, Down, Keyboard, Mic, More, Plus, Send, Speaker } from './icons.tsx';
 import { ConfirmCloseSheet, MenuSheet, NewTabSheet, RenameSheet } from './sheets.tsx';
+import { ThemeChips } from './settings.tsx';
 import { SwitchDrawer } from './switch.tsx';
-import { AGENT_KEYS, SHELL_KEYS } from './keys.ts';
+import { AGENT_KEYS, INLINE_KEYS, SHELL_KEYS } from './keys.ts';
 import { quickReplies } from './replies.ts';
 
-const color = (c: number | string | undefined) => (typeof c === 'number' ? `var(--ansi-${c})` : c);
+// ---- themed terminal colours ----
+// A 256-colour or truecolour span carries the palette the agent picked, which is nobody's
+// theme. Snapped on, every such colour becomes the nearest of the theme's own 16, so one
+// Pane reads as one picture. Indices 0–15 already resolve through `--ansi-*` and are left be.
+let themed = localStorage.getItem('tautan.themedColors') !== 'off';
+export const themedColors = () => themed;
+export function setThemedColors(on: boolean) {
+  themed = on;
+  localStorage.setItem('tautan.themedColors', on ? 'on' : 'off');
+}
+
+const EXTRA_TOKENS = ['--warn', '--ok', '--danger', '--accent'] as const;
+let paletteTheme: string | null = null;
+let palette: [number, number, number][] = [];
+/** One answer per distinct colour string: a screen repeats the same few thousands of times. */
+const snapped = new Map<string, string>();
+
+function parseColor(css: string): [number, number, number] | null {
+  const s = css.trim();
+  if (s.startsWith('#')) {
+    const hex = s.length === 4 ? [...s.slice(1)].map((c) => c + c).join('') : s.slice(1);
+    if (hex.length < 6) return null;
+    return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+  }
+  const n = s.match(/\d+/g);
+  return n && n.length >= 3 ? [+n[0]!, +n[1]!, +n[2]!] : null;
+}
+
+/** The nearest `--ansi-*` by squared RGB distance. The palette is read once per theme. */
+function nearestAnsi(css: string): string {
+  const theme = document.documentElement.dataset.theme ?? '';
+  if (theme !== paletteTheme) {
+    const style = getComputedStyle(document.documentElement);
+    // The sixteen ANSI slots plus the theme's semantic tokens: Catppuccin has no orange among
+    // its sixteen, so without --warn a peach permission frame would snap to pink.
+    palette = [
+      ...Array.from({ length: 16 }, (_, i) => `--ansi-${i}`),
+      ...EXTRA_TOKENS,
+    ].map((v) => parseColor(style.getPropertyValue(v)) ?? [0, 0, 0]);
+    paletteTheme = theme;
+    snapped.clear();
+  }
+  const hit = snapped.get(css);
+  if (hit) return hit;
+  const want = parseColor(css);
+  let best = css;
+  if (want) {
+    let bestAt = 0;
+    let bestBy = Infinity;
+    palette.forEach((p, i) => {
+      const d = (p[0] - want[0]) ** 2 + (p[1] - want[1]) ** 2 + (p[2] - want[2]) ** 2;
+      if (d < bestBy) {
+        bestBy = d;
+        bestAt = i;
+      }
+    });
+    best = `var(${bestAt < 16 ? `--ansi-${bestAt}` : EXTRA_TOKENS[bestAt - 16]})`;
+  }
+  snapped.set(css, best);
+  return best;
+}
+
+const color = (c: number | string | undefined) =>
+  typeof c === 'number' ? `var(--ansi-${c})` : c && themed ? nearestAnsi(c) : c;
 
 /** The one ANSI-span style function. blocked.tsx renders the detection with it too. */
 export function spanStyle(s: Span): CSSProperties {
@@ -145,13 +209,28 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
   // grid that already fits is left alone even then.
   const [fit, setFitState] = useState(() => localStorage.getItem('tautan.fit') === 'on');
   const setFit = (v: boolean) => { localStorage.setItem('tautan.fit', v ? 'on' : 'off'); setFitState(v); };
+  // The key bar is one row of the dock, behind its own trigger: an agent Pane types, so it
+  // starts collapsed and the composer is nearest the keyboard; a shell Pane only has keys.
+  const [keyBars, setKeyBars] = useState(() => ({
+    agent: localStorage.getItem('tautan.keys.agent') === 'on',
+    shell: localStorage.getItem('tautan.keys.shell') !== 'off',
+  }));
+  const showKeys = keyBars[kind];
+  const setShowKeys = (v: boolean) => {
+    localStorage.setItem(`tautan.keys.${kind}`, v ? 'on' : 'off');
+    setKeyBars((k) => ({ ...k, [kind]: v }));
+  };
   const [scale, setScale] = useState(1);
+  /** The grid's own width, measured from the `<pre>`. It sizes the whole column. */
+  const [natural, setNatural] = useState(0);
   const [fade, setFade] = useState(false);
   const [fresh, setFresh] = useState(false);
   const [explain, setExplain] = useState<Explain | null>(null);
   const [showSwitch, setShowSwitch] = useState(() => opensWith('switch'));
   const [showMore, setShowMore] = useState(() => opensWith('more'));
   const [showNewTab, setShowNewTab] = useState(() => opensWith('newtab'));
+  // Off means the agent's own 256-colour and truecolour values render as sent.
+  const [themedOn, setThemedOn] = useState(themedColors);
   const [rename, setRename] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
 
@@ -175,6 +254,15 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
 
   // Window width feeds the Fit scale, so a rotation or a desktop resize re-fits the grid.
   const [viewportW, setViewportW] = useState(() => innerWidth);
+  // The mono subset swaps in after first paint and changes every column's width with it, so
+  // the grid is measured again once the fonts are settled.
+  const [fonts, setFonts] = useState(false);
+  useEffect(() => {
+    void document.fonts?.ready.then(() => {
+      setNatural(0);
+      setFonts(true);
+    });
+  }, []);
   useEffect(() => {
     const onResize = () => { setViewportW(innerWidth); measure(); };
     addEventListener('resize', onResize);
@@ -190,8 +278,13 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
     const pad = getComputedStyle(el.parentElement);
     const room = el.parentElement.clientWidth - parseFloat(pad.paddingLeft || '0') - parseFloat(pad.paddingRight || '0');
     setScale(fit ? Math.min(1, room / el.scrollWidth) : 1);
+    // Wrapped text is sized by the column it sits in, so measuring it would feed the column
+    // its own width back. The fallback column is the right width for reflowed prose anyway.
+    // The widest line wins and keeps winning: a column that resized on every frame of agent
+    // output would move the header, the Tabs and the dock with it.
+    if (!wrap) setNatural((n) => Math.max(n, el.scrollWidth));
     measure();
-  }, [fit, wrap, lines, viewportW]);
+  }, [fit, wrap, lines, viewportW, fonts]);
 
   // Mark Seen once the screen settles: Seen is tautan's own flag, never written to the Mux.
   useEffect(() => {
@@ -204,6 +297,9 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
   useEffect(() => {
     if (pane) lastPane.set(`${pane.muxKey}/${pane.tabId}`, pane.key);
   }, [pane?.key]);
+
+  /** A new Pane measures its own grid rather than inheriting the last one's column. */
+  useEffect(() => setNatural(0), [paneKey]);
 
   // Smart replies are the phone's own switch; Settings writes it and tells the Hub too.
   const [smart] = useState(() => localStorage.getItem('tautan.smart') === 'on');
@@ -416,66 +512,74 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
   const active = tabs.find((t) => t.id === pane?.tabId);
   const grid = pane?.cols && pane.rows ? `${pane.cols}×${pane.rows}` : 'fit';
   const pills = agent ? quickReplies({ agent, explain, suggestions: pane?.suggestions, smart }) : [];
+  const preset = agent ? AGENT_KEYS : SHELL_KEYS;
+  const inlineKeys = preset.filter(([name]) => INLINE_KEYS[kind].includes(name));
+  // One column for the whole screen, the grid's own width plus the scroller's padding, so a
+  // desktop centres a content-sized Pane instead of stretching every bar to the window. A
+  // phone is simply the window. See DESIGN.md "Terminal width on a phone".
+  // 32 px is the scroller's own padding; the 2 px on top absorbs the fraction `scrollWidth`
+  // rounds away, so the grid never overflows by a hair and raises the fade for nothing.
+  const column = viewportW >= 1024 ? `clamp(420px, ${(natural || 640) + 34}px, 100vw)` : undefined;
 
   return (
-    // On a desktop the column is the window: the grid keeps its own width, centred, rather
-    // than being scaled down to a phone column it does not need. See DESIGN.md.
-    <div className="mx-auto flex h-dvh max-w-2xl flex-col pt-[env(safe-area-inset-top)] lg:max-w-none">
-      <header className="flex h-11 shrink-0 items-center gap-1 pr-2 pl-1">
-        <a href="#/" aria-label="All panes" className="flex size-11 shrink-0 items-center justify-center text-accent">
+    <div className="mx-auto flex h-dvh w-full flex-col pt-[env(safe-area-inset-top)]" style={{ maxWidth: column }}>
+      {/* One grid, laid out by width: back · title · Switch · spacer · actions, with the
+          status line on a second row under the title. */}
+      <header className="grid h-11 shrink-0 grid-cols-[auto_minmax(0,auto)_auto_1fr_auto] grid-rows-2 items-center px-1">
+        <a href="#/" aria-label="All panes" className="row-span-2 flex size-11 items-center justify-center text-accent">
           <Back />
         </a>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <h1 className="truncate text-title tracking-tight">{pane?.title ?? '…'}</h1>
-          <button
-            type="button"
-            onClick={() => setShowSwitch(true)}
-            aria-label="Switch Pane"
-            className="flex min-w-0 items-center gap-1.5 text-caption text-muted"
-          >
-            <Dot status={status} />
-            <span aria-live="polite" className={statusText[status]}>
-              {status}
-            </span>
-            <span className="truncate">
-              · {agent ?? 'shell'} · {ws?.label}
-            </span>
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden className="shrink-0">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
-            </svg>
-          </button>
-        </div>
+        <h1 className="truncate text-title tracking-tight">{pane?.title ?? '…'}</h1>
         <button
           type="button"
           aria-label="Switch Pane"
           onClick={() => setShowSwitch(true)}
-          className="flex h-11 w-10 shrink-0 items-center justify-center text-muted"
+          className="press flex h-6 w-6 items-center justify-center text-muted"
         >
-          <Switch2 />
+          <ChevronDown />
         </button>
-        {agent && (
-          <button
-            type="button"
-            aria-label="Read aloud"
-            onClick={speak}
-            className="flex h-11 w-10 shrink-0 items-center justify-center text-muted"
-          >
-            <Speaker />
-          </button>
-        )}
+        {/* The same drawer as the ⌄ above it. Its own words are its name, so a screen
+            reader does not hear "Switch Pane" twice in one bar. */}
         <button
           type="button"
-          aria-label="More"
-          onClick={() => setShowMore(true)}
-          className="flex h-11 w-10 shrink-0 items-center justify-center text-muted"
+          onClick={() => setShowSwitch(true)}
+          className="col-start-2 col-end-5 row-start-2 flex min-w-0 items-center gap-1.5 text-caption text-muted"
         >
-          <More />
+          <Dot status={status} />
+          <span aria-live="polite" className={statusText[status]}>
+            {status}
+          </span>
+          <span className="truncate">
+            · {agent ?? 'shell'} · {ws?.label}
+          </span>
         </button>
+        {/* What is left after the Tab strip took + and the ⋯ sheet took Fit. */}
+        <div className="col-start-5 row-span-2 flex items-center gap-0.5 pl-1">
+          {agent && (
+            <button
+              type="button"
+              aria-label="Read aloud"
+              onClick={speak}
+              className="press flex h-11 w-10 items-center justify-center text-muted"
+            >
+              <Speaker />
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label="More"
+            onClick={() => setShowMore(true)}
+            className="press flex h-11 w-10 items-center justify-center text-muted"
+          >
+            <More />
+          </button>
+        </div>
       </header>
 
-      {/* Tab strip, browser-tab position. Swipe here, never on the grid. */}
+      {/* The strip is one section of two rows: the Workspace's Tabs, and the open Tab's
+          Panes under them. Swipe here, never on the grid. */}
       <div
-        className="flex shrink-0 items-center pt-0.5 pr-3 pb-2 pl-2"
+        className="shrink-0 px-3 pt-0.5 pb-1.5"
         onTouchStart={(e) => {
           swipe.current = { x: e.touches[0]?.clientX ?? 0, scroll: strip.current?.scrollLeft ?? 0 };
         }}
@@ -487,77 +591,69 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
           if (tabs[i]) openTab(tabs[i].id);
         }}
       >
-        <div ref={strip} role="tablist" aria-label="Tabs" className="hscroll relative mx-1 flex flex-1 items-end gap-0.5 border-b border-border">
-          {tabs.map((t) => {
-            const on = t.id === pane?.tabId;
-            return (
+        <div className="flex items-stretch border-b border-border">
+          {writable && (
+            <button
+              type="button"
+              aria-label="New Tab"
+              onClick={() => setShowNewTab(true)}
+              className="press mr-1 flex w-9 shrink-0 items-center justify-center self-end pb-2 text-accent"
+            >
+              <Plus />
+            </button>
+          )}
+          <div ref={strip} role="tablist" aria-label="Tabs" className="hscroll relative flex min-w-0 flex-1 items-end gap-0.5">
+            {tabs.map((t) => {
+              const on = t.id === pane?.tabId;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={on}
+                  onClick={() => openTab(t.id)}
+                  className={`press flex shrink-0 items-center gap-1.5 px-2.5 pt-2 pb-3 text-[13px] whitespace-nowrap ${
+                    on ? 'font-semibold text-fg' : 'font-medium text-muted'
+                  }`}
+                >
+                  <Dot status={t.status} seen={t.status === 'idle' || t.status === 'unknown'} size={6} />
+                  {t.label}
+                  {t.panes.length > 1 && <span className="ml-0.5 font-mono text-[10px] text-muted">{t.panes.length}</span>}
+                </button>
+              );
+            })}
+            <span
+              aria-hidden
+              data-testid="tab-underline"
+              className="absolute bottom-[-1px] left-0 h-0.5 bg-accent transition-[transform,width] duration-200 ease-out motion-reduce:transition-none"
+              style={{ width: underline.w, transform: `translateX(${underline.x}px)` }}
+            />
+          </div>
+        </div>
+
+        {/* Row two: the Panes of the Tab the underline points at. */}
+        {active && active.panes.length > 1 && (
+          <div role="group" aria-label="Panes in this Tab" className="hscroll flex gap-1.5 pt-1.5">
+            {active.panes.map((p) => (
               <button
-                key={t.id}
+                key={p.key}
                 type="button"
-                role="tab"
-                aria-selected={on}
-                onClick={() => openTab(t.id)}
-                className={`press flex shrink-0 items-center gap-1.5 px-2.5 pt-2 pb-3 text-[13px] whitespace-nowrap ${
-                  on ? 'font-semibold text-fg' : 'font-medium text-muted'
+                aria-current={p.key === paneKey ? 'true' : undefined}
+                onClick={() => {
+                  haptic();
+                  navigate(`#/pane/${encodeURIComponent(p.key)}`);
+                }}
+                className={`press flex shrink-0 items-center gap-1.5 rounded-chip px-2.5 py-1 text-[12px] whitespace-nowrap ${
+                  p.key === paneKey ? 'bg-surface font-medium text-fg' : 'text-muted'
                 }`}
               >
-                <Dot status={t.status} seen={t.status === 'idle' || t.status === 'unknown'} size={6} />
-                {t.label}
-                {t.panes.length > 1 && <span className="ml-0.5 font-mono text-[10px] text-muted">{t.panes.length}</span>}
+                <Dot status={p.status} size={6} seen={p.key !== paneKey} />
+                {p.agent ?? 'shell'}
               </button>
-            );
-          })}
-          <span
-            aria-hidden
-            data-testid="tab-underline"
-            className="absolute bottom-[-1px] left-0 h-0.5 bg-accent transition-[transform,width] duration-200 ease-out motion-reduce:transition-none"
-            style={{ width: underline.w, transform: `translateX(${underline.x}px)` }}
-          />
-        </div>
-        {writable && (
-          <button
-            type="button"
-            aria-label="New Tab"
-            onClick={() => setShowNewTab(true)}
-            className="mr-1.5 flex size-9 shrink-0 items-center justify-center text-accent"
-          >
-            <Plus />
-          </button>
+            ))}
+          </div>
         )}
-        <button
-          type="button"
-          aria-pressed={fit}
-          onClick={() => setFit(!fit)}
-          className={`press shrink-0 rounded-chip border px-2.5 py-[5px] font-mono text-[11px] ${
-            fit ? 'border-accent bg-accent font-semibold text-bg' : 'border-border text-muted'
-          }`}
-        >
-          {grid}
-          {fit && ' · fit'}
-        </button>
       </div>
-
-      {active && active.panes.length > 1 && (
-        <div role="group" aria-label="Panes in this Tab" className="hscroll flex shrink-0 gap-1.5 px-3 pb-2">
-          {active.panes.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              aria-current={p.key === paneKey ? 'true' : undefined}
-              onClick={() => {
-                haptic();
-                navigate(`#/pane/${encodeURIComponent(p.key)}`);
-              }}
-              className={`press flex shrink-0 items-center gap-1.5 rounded-chip px-2.5 py-1 text-[12px] ${
-                p.key === paneKey ? 'bg-surface font-medium text-fg' : 'text-muted'
-              }`}
-            >
-              <Dot status={p.status} size={6} seen={p.key !== paneKey} />
-              {p.agent ?? 'shell'}
-            </button>
-          ))}
-        </div>
-      )}
 
       <div className="relative min-h-0 flex-1">
         <div
@@ -627,10 +723,43 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
       )}
 
       <div className="flex shrink-0 flex-col gap-2.5 rounded-t-drawer bg-elevated pt-3 pb-[max(env(safe-area-inset-bottom),12px)] shadow-[0_-8px_24px_rgb(0_0_0/0.25)]">
-        {/* The dock surface is the full window; its controls stay in the reading column. */}
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-2.5 lg:max-w-4xl">
-          {agent && pills.length > 0 && (
-            <div role="group" aria-label="Quick replies" className="hscroll flex gap-2 px-4">
+        {/* One bar: the keys a hand reaches for on the left, the replies you tap on the right. */}
+        <div className="flex items-center gap-2 pl-4">
+          <div className="flex shrink-0 items-center gap-1">
+            {inlineKeys.map(([name, label]) => (
+              <button
+                key={name}
+                type="button"
+                aria-label={name}
+                onClick={() => keys([name])}
+                className="press flex h-9 min-w-9 items-center justify-center rounded-chip border border-border bg-bg px-2 font-mono text-[11px] text-fg active:bg-surface"
+              >
+                {label}
+              </button>
+            ))}
+            <button
+              type="button"
+              aria-label="Keys"
+              aria-expanded={showKeys}
+              aria-controls="pane-keys"
+              onClick={() => {
+                haptic();
+                setShowKeys(!showKeys);
+              }}
+              className={`press flex size-9 items-center justify-center rounded-chip border ${
+                showKeys ? 'border-accent bg-accent text-bg' : 'border-border text-muted'
+              }`}
+            >
+              <Keyboard />
+            </button>
+          </div>
+          {pills.length > 0 && (
+            <div
+              role="group"
+              aria-label="Quick replies"
+              className="hscroll flex min-w-0 flex-1 gap-2 border-l border-border py-0.5 pr-4 pl-2"
+              style={{ maskImage: FADE, WebkitMaskImage: FADE }}
+            >
               {pills.map((p, i) =>
                 p.kind === 'key' ? (
                   <button
@@ -666,135 +795,11 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
               )}
             </div>
           )}
+        </div>
 
-          {agent && (
-            <div className="flex flex-col gap-1.5 px-4">
-              <div aria-hidden className="flex items-center gap-1.5 text-caption text-muted">
-                <span className="text-accent">✻</span> {agent}
-              </div>
-              <div className="flex items-end gap-2 rounded-composer border border-border bg-bg py-1 pr-1.5 pl-3.5">
-                <textarea
-                  ref={input}
-                  rows={1}
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                      e.preventDefault();
-                      send();
-                    }
-                  }}
-                  enterKeyHint="send"
-                  aria-label={`Reply to ${agent}`}
-                  placeholder={`Reply to ${agent[0]!.toUpperCase()}${agent.slice(1)}…`}
-                  className="max-h-24 min-h-9 flex-1 resize-none self-center bg-transparent py-2 text-body leading-5 placeholder:text-muted focus:outline-none"
-                />
-                {text.trim() || !canDictate ? (
-                  <button
-                    type="button"
-                    onClick={send}
-                    disabled={!text.trim()}
-                    aria-label="Send"
-                    className={`press flex size-9 shrink-0 items-center justify-center rounded-chip ${
-                      text.trim() ? 'bg-accent text-bg' : 'bg-surface text-muted'
-                    }`}
-                  >
-                    <Send />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={dictate}
-                    aria-label="Dictate"
-                    aria-pressed={listening}
-                    className={`press flex size-9 shrink-0 items-center justify-center ${listening ? 'text-accent' : 'text-muted'}`}
-                  >
-                    <Mic />
-                  </button>
-                )}
-                <input
-                  ref={picker}
-                  type="file"
-                  // ponytail: no `capture` — the button opens the library, never the camera.
-                  // `image/*` is what makes iOS hand over a JPEG for a HEIC pick; see docs/UI.md.
-                  accept="image/*,video/*"
-                  multiple
-                  hidden
-                  onChange={(e) => {
-                    attach(e.target.files);
-                    e.target.value = ''; // so the same file can be picked twice
-                  }}
-                />
-                <button
-                  type="button"
-                  aria-label="Attach"
-                  onClick={() => picker.current?.click()}
-                  className="flex size-9 shrink-0 items-center justify-center text-muted"
-                >
-                  <Attach />
-                </button>
-              </div>
-
-              {inFlight.length > 0 && (
-                <div
-                  role="progressbar"
-                  aria-label="Uploading"
-                  aria-valuenow={Math.round(progress * 100)}
-                  className="h-0.5 overflow-hidden rounded-full bg-surface"
-                >
-                  <div
-                    className="h-full bg-accent transition-[width] duration-150 ease-out motion-reduce:transition-none"
-                    style={{ width: `${progress * 100}%` }}
-                  />
-                </div>
-              )}
-
-              {uploads.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {uploads.map((u) => (
-                    <span
-                      key={u.id}
-                      title={u.display ?? u.file.name}
-                      className={`flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-chip border border-border bg-bg py-0.5 pr-0.5 pl-2.5 text-caption ${
-                        u.status === 'error' ? 'text-danger' : 'text-fg'
-                      }`}
-                    >
-                      <span className="truncate">{u.file.name}</span>
-                      <span className="shrink-0 text-muted">{human(u.file.size)}</span>
-                      <button
-                        type="button"
-                        aria-label={`Remove ${u.file.name}`}
-                        onClick={() => drop(u)}
-                        className="press flex size-7 shrink-0 items-center justify-center rounded-chip text-muted"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {uploads.some((u) => u.status === 'error') && (
-                <div role="status" className="flex flex-col gap-1">
-                  {uploads
-                    .filter((u) => u.status === 'error')
-                    .map((u) => (
-                      <p key={u.id} className="text-caption text-muted">
-                        {u.file.name} failed · {u.reason}{' '}
-                        <button type="button" onClick={() => retry(u)} className="text-accent">
-                          Retry
-                        </button>
-                      </p>
-                    ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Last in the dock: on a phone the key bar rides directly above the keyboard,
-              like an accessory row, with the composer it types into just over it. */}
-          <div role="group" aria-label="Keys" className="hscroll flex gap-2 px-4">
-            {(agent ? AGENT_KEYS : SHELL_KEYS).map(([name, label]) => (
+        {showKeys && (
+          <div id="pane-keys" role="group" aria-label="Keys" className="rise hscroll flex gap-2 px-4">
+            {preset.map(([name, label]) => (
               <button
                 key={name}
                 type="button"
@@ -808,7 +813,132 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
               </button>
             ))}
           </div>
-        </div>
+        )}
+
+        {agent && (
+          <div className="flex flex-col gap-1.5 px-4">
+            <div className="flex items-end gap-2 rounded-composer border border-border bg-bg py-1 pr-1.5 pl-3">
+              {/* The agent's glyph labels the field from inside it, where the prompt is. */}
+              <span aria-hidden className="self-center text-accent">
+                ✻
+              </span>
+              <textarea
+                ref={input}
+                rows={1}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    send();
+                  }
+                }}
+                enterKeyHint="send"
+                aria-label={`Reply to ${agent}`}
+                placeholder={`Reply to ${agent[0]!.toUpperCase()}${agent.slice(1)}…`}
+                className="max-h-24 min-h-9 flex-1 resize-none self-center bg-transparent py-2 text-body leading-5 placeholder:text-muted focus:outline-none"
+              />
+              {text.trim() || !canDictate ? (
+                <button
+                  type="button"
+                  onClick={send}
+                  disabled={!text.trim()}
+                  aria-label="Send"
+                  className={`press flex size-9 shrink-0 items-center justify-center rounded-chip ${
+                    text.trim() ? 'bg-accent text-bg' : 'bg-surface text-muted'
+                  }`}
+                >
+                  <Send />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={dictate}
+                  aria-label="Dictate"
+                  aria-pressed={listening}
+                  className={`press flex size-9 shrink-0 items-center justify-center ${listening ? 'text-accent' : 'text-muted'}`}
+                >
+                  <Mic />
+                </button>
+              )}
+              <input
+                ref={picker}
+                type="file"
+                // ponytail: no `capture` — the button opens the library, never the camera.
+                // `image/*` is what makes iOS hand over a JPEG for a HEIC pick; see docs/UI.md.
+                accept="image/*,video/*"
+                multiple
+                hidden
+                onChange={(e) => {
+                  attach(e.target.files);
+                  e.target.value = ''; // so the same file can be picked twice
+                }}
+              />
+              <button
+                type="button"
+                aria-label="Attach"
+                onClick={() => picker.current?.click()}
+                className="flex size-9 shrink-0 items-center justify-center text-muted"
+              >
+                <Attach />
+              </button>
+            </div>
+
+            {inFlight.length > 0 && (
+              <div
+                role="progressbar"
+                aria-label="Uploading"
+                aria-valuenow={Math.round(progress * 100)}
+                className="h-0.5 overflow-hidden rounded-full bg-surface"
+              >
+                <div
+                  className="h-full bg-accent transition-[width] duration-150 ease-out motion-reduce:transition-none"
+                  style={{ width: `${progress * 100}%` }}
+                />
+              </div>
+            )}
+
+            {uploads.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {uploads.map((u) => (
+                  <span
+                    key={u.id}
+                    title={u.display ?? u.file.name}
+                    className={`flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-chip border border-border bg-bg py-0.5 pr-0.5 pl-2.5 text-caption ${
+                      u.status === 'error' ? 'text-danger' : 'text-fg'
+                    }`}
+                  >
+                    <span className="truncate">{u.file.name}</span>
+                    <span className="shrink-0 text-muted">{human(u.file.size)}</span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${u.file.name}`}
+                      onClick={() => drop(u)}
+                      className="press flex size-7 shrink-0 items-center justify-center rounded-chip text-muted"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {uploads.some((u) => u.status === 'error') && (
+              <div role="status" className="flex flex-col gap-1">
+                {uploads
+                  .filter((u) => u.status === 'error')
+                  .map((u) => (
+                    <p key={u.id} className="text-caption text-muted">
+                      {u.file.name} failed · {u.reason}{' '}
+                      <button type="button" onClick={() => retry(u)} className="text-accent">
+                        Retry
+                      </button>
+                    </p>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <SwitchDrawer open={showSwitch} onClose={() => setShowSwitch(false)} state={state} currentKey={paneKey} onPick={haptic} />
@@ -816,8 +946,22 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
         open={showMore}
         title={pane?.title ?? 'Pane'}
         onClose={() => setShowMore(false)}
+        head={
+          <>
+            <h3 className="label-caps px-4 pb-2">Theme</h3>
+            <ThemeChips />
+          </>
+        }
         items={[
           { label: wrap ? 'Wrap: on' : 'Wrap: off', onClick: () => setWrap(!wrap) },
+          { label: fit ? 'Fit to width: on' : 'Fit to width: off', hint: grid, onClick: () => setFit(!fit) },
+          {
+            label: themedOn ? 'Theme colors: on' : 'Theme colors: off',
+            onClick: () => {
+              setThemedColors(!themedOn);
+              setThemedOn(!themedOn);
+            },
+          },
           ...(ws ? [{ label: 'Diff', onClick: () => navigate(`#/diff/${encodeURIComponent(ws.key)}`) }] : []),
           ...(writable
             ? [

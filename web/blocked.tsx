@@ -28,7 +28,7 @@ export function Blocked({ explain }: { explain: Explain }) {
     <section
       role="region"
       aria-label="Blocked"
-      className="rise mx-3 mb-2.5 flex flex-col gap-2.5 rounded-card border border-border bg-elevated px-3.5 py-3 shadow-elevated lg:mx-auto lg:w-full lg:max-w-4xl"
+      className="rise mx-3 mb-2.5 flex flex-col gap-2.5 rounded-card border border-border bg-elevated px-3.5 py-3 shadow-elevated"
     >
       <div className="flex items-center justify-between gap-3">
         <h2 className="truncate text-[13px] font-semibold">{title}</h2>

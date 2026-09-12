@@ -19,8 +19,8 @@ glyph. A floating tab bar carries the three root destinations and hides while yo
 | Screen | Mockup | What it shows |
 |---|---|---|
 | Agents · Mocha | ![Home](design/home-mocha.png) | Needs-you section, collapsible Workspace groups with Host suffix and a summary when collapsed, offline Host row, floating tab bar with badge |
-| Pane · Claude blocked | ![Pane agent](design/pane-agent.png) | Top bar: back, title, status line (tap opens Switch), actions Switch · read aloud · more (Wrap, Rename, Close). Tab strip under it: one underlined tab per Tab of the Workspace, status dot, Pane count when >1, + for a new Tab, Fit chip at the right. Grid with right-edge fade. Blocked card floating above the dock. Bottom dock: key bar and composer as the agent's prompt |
-| Pane · shell | ![Pane shell](design/pane-shell.png) | htop with Fit on, same top bar and Tab strip, shell key bar in the dock, no composer |
+| Pane · Claude blocked | ![Pane agent](design/pane-agent.png) | Top bar: back, title with the Switch chevron, status line under it, read aloud and ⋯. Tab strip under it: + then the Tabs, and the open Tab's Panes on a second row. Grid with right-edge fade. Blocked card floating above the dock. Bottom dock: the inline keys and their toggle on the left, quick replies scrolling on the right, then the composer |
+| Pane · shell | ![Pane shell](design/pane-shell.png) | htop with Fit on, same top bar and Tab strip (tmux, so no +), the key bar expanded by default in the dock, no composer |
 | Hosts | ![Hosts](design/hosts.png) | One card per Host: state, Muxes with Pane counts, error with Retry, Add Host |
 | Switch drawer | ![Switch](design/switch.png) | From any Pane: search, Host chips, every Workspace with its Panes under their Tab labels. Two taps to any Pane on any Host |
 | Settings | ![Settings](design/settings.png) | Theme chips, Hosts summary, push and haptics toggles, iOS install hint, access rows |
@@ -29,21 +29,23 @@ glyph. A floating tab bar carries the three root destinations and hides while yo
 
 ## Pane top bar and bottom dock
 
-The Pane screen is two bars and a grid between them.
+The Pane screen is one column: two bars, a grid between them, and the dock. Everything on the
+screen shares that column's width, so nothing stretches to the window.
 
 | Bar | Contents | Behaviour |
 |---|---|---|
-| Top bar | 44 px back chevron · title · status line "● status · agent · workspace ⌄" · actions: Switch (grid icon), read aloud (speaker), more (⋯) | Status line tap opens the Switch drawer. More holds Wrap, Rename, Close Pane, Resize to phone (v2) |
-| Tab strip | Directly under the top bar, browser-tab position: one tab per Tab of the Workspace with status dot, label, Pane count when the Tab holds several; active tab underlined in accent; + creates a Tab; Fit chip (label = grid size) at the right end | Tap switches Tab; swipe on the strip too. When the active Tab holds several Panes a row of small Pane pills appears under the strip |
+| Column | One wrapper for the whole screen. From `lg` up its width is `clamp(420px, <grid width + 34px>, 100vw)`, measured from the `<pre>`; below `lg` it is the window | The header, the Tab strip, the grid, the blocked card and the dock all sit in it and are centred together |
+| Top bar | 44 px + safe area, laid out as one grid: 44 px back chevron · title (17 px, 600, truncates) · the ⌄ that opens Switch · spacer · read aloud (agent Panes) · ⋯. The status line "● status · agent · workspace" sits under the title and opens Switch too | The bar carries no setting of its own: ⋯ holds the theme chips, then Wrap, Fit to width (hinted with the grid size), Theme colors, Diff, Rename, Close Pane |
+| Tab strip | One section of two rows under the top bar. Row 1: **+** for a new Tab (herdr only), then one tab per Tab of the Workspace with status dot, label and Pane count when the Tab holds several; the active tab is underlined in accent on the section's hairline. Row 2: the Panes of the open Tab, as pills, only when it holds several | Tap switches Tab; swipe on the strip too |
 | Blocked card | floats above the dock, `--elevated`, 1 px hairline | Only while Status is `blocked` |
-| Bottom dock | `--elevated`, 16 px top radius. Agent Panes: quick-reply pills, composer, key bar. Shell Panes: key bar only | Key pills (Yes ↵, No esc) send at once; text pills (✦ generated, or static per agent) fill the composer for review. The key bar sits last so it rides above the keyboard like an accessory row |
+| Bottom dock | `--elevated`, 16 px top radius. Row 1: the most-used keys and the keys toggle on the left, then a hairline, the quick-reply pills scrolling on the right behind a fade. Row 2: the whole key preset, which the toggle opens. Row 3: the composer, on agent Panes, with the agent's glyph inside the field | Key pills (Yes ↵, No esc) send at once; text pills (✦ generated, or static per agent) fill the composer for review. The key bar starts collapsed on an agent Pane, where the composer is what the keyboard should meet, and open on a shell Pane, which has nothing else |
 
 ## Creating things
 
 | Action | Where | Result |
 |---|---|---|
 | New Workspace | + in the Agents header → New Workspace drawer (directory, label, worktree branch) | herdr `workspace.create` / `worktree.create` |
-| New Tab | + at the end of the Tab strip under the Pane's top bar, or long-press a Workspace header → New Tab drawer (label, directory, start agent) | herdr `tab.create` makes the Tab with one root Pane; the drawer optionally starts an agent in it |
+| New Tab | + at the start of the Pane's Tab strip, or long-press a Workspace header → New Tab drawer (label, directory, start agent) | herdr `tab.create` makes the Tab with one root Pane; the drawer optionally starts an agent in it |
 | Rename, Close | ⋯ in the Pane top bar; long-press a row on the Agents screen | Drawer / Dialog |
 
 A Tab is never its own screen: on the phone it is an entry in the Pane's Tab strip and a label
@@ -56,12 +58,13 @@ in the Switch drawer. A Tab with one Pane opens straight to that Pane.
 | Hosts | Agents tab: Host chips under the header filter the list. Hosts tab: cards | tap |
 | Workspaces | Agents tab: collapsible groups, state remembered. From a Pane: tap the subtitle to open the Switch drawer | tap |
 | Tabs | The Tab strip under the Pane's top bar; the Switch drawer shows the same grouping | tap tab, swipe |
-| Agents and shells | Tabs in the strip; Pane pills under the strip when a Tab holds several; swipe on the strip or the dock (never on the grid) | tap, swipe |
+| Agents and shells | Tabs in the strip's first row; the open Tab's Pane pills in its second; swipe on the strip (never on the grid) | tap, swipe |
 
 ## Terminal width on a phone
 
-The grid is what the multiplexer rendered at the server's size. Three answers, in order:
+The grid is what the multiplexer rendered at the server's size. Four answers, in order:
 
+0. **Give the grid the column** (v1): from `lg` up the column is the grid's own measured width plus the scroller's padding, centred, so a desktop shows the whole grid and scales nothing. A phone is narrower than any grid, so the next two answers are for the phone.
 1. **Wrap** (v1): the same grid text reflowed to the phone width, client-side. Reading mode for agent output. Replaces the earlier Screen/Recent idea: Claude Code runs on the alternate screen, so herdr's "recent" returns the same rows as the visible grid.
 2. **Fit** (v1): scale the grid to the phone width with exact metrics; the toggle label shows the grid size.
 3. **Resize to phone is not possible today:** herdr 0.9 exposes rendered Screen reads and shared split-ratio resizing, but no API for exact columns/rows or a separately sized client surface; a client viewing the same Tab can change the desktop's Pane sizes. Keep Wrap and Fit. A future Resize action must be explicit, warn that it changes the shared desktop layout, record the old geometry, and restore it on leaving.
@@ -81,9 +84,9 @@ The grid is what the multiplexer rendered at the server's size. Three answers, i
 | Accent | primary button, current chip or tab, `working`, focus ring. Nothing else |
 | Radius | 8 px chips, buttons and key caps; 10 px composer; 12 px cards and the blocked card; 14 px tab bar; 16 px drawer top. Dots stay circles. No pills |
 | Type | caption 12/1.35 · body 15/1.45 · title 17/1.25 600 · mono 12/1.35 |
-| Grid | scrolled by default, right-edge fade while it overflows; Fit chip scales the `<pre>`; Wrap (in ⋯) reflows |
-| Key bar | agent: `esc ↑ ↓ tab shift+tab enter ctrl+c` · shell: `esc tab ↑ ↓ ← → enter ctrl+c ctrl+d` |
-| Composer | 12 px label with the agent's glyph, placeholder in the agent's voice, mic replaces send while empty |
+| Grid | scrolled by default, right-edge fade while it overflows. The three reading options live in ⋯: Wrap reflows, Fit scales the `<pre>`, Theme colors snaps every 256-colour and truecolour span to the nearest of the theme's own 16 |
+| Key bar | agent: `esc ↑ ↓ tab shift+tab enter ctrl+c`, inline `esc ↑ ↓ enter` · shell: `esc tab ↑ ↓ ← → enter ctrl+c ctrl+d ctrl+l ctrl+r`, inline `esc tab enter` |
+| Composer | the agent's glyph inside the field, placeholder in the agent's voice, mic replaces send while empty |
 | Blocked card | sticky above the key bar, `--elevated`, title + rule id, one-line detection excerpt, Yes/No preset then hint keys |
 | Chrome left blank | status bar area (54 px) and the keyboard; the OS draws both |
 
@@ -103,7 +106,6 @@ The grid is what the multiplexer rendered at the server's size. Three answers, i
 1. Call a Workspace a "Space" in the UI? (herdr says workspace; tmux says session; the maintainer says space.)
 2. Blocked card: open by default, or collapsed to one line until tapped?
 3. Theme picker: chips (as mocked) or a full list with previews?
-4. Fit toggle label: the grid size (`120×48`) or the word "Fit"?
 
 ## How to update the mockups
 

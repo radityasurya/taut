@@ -164,14 +164,18 @@ export function MenuSheet({
   title,
   onClose,
   items,
+  head,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
   items: { label: string; onClick?: () => void; hint?: string; danger?: boolean; disabled?: boolean }[];
+  /** Anything the menu shows before its rows, such as the Pane sheet's theme chips. */
+  head?: ReactNode;
 }) {
   return (
     <Sheet open={open} title={title} onClose={onClose}>
+      {head && <div className="-mx-4 pb-3">{head}</div>}
       <ul className="pb-2">
         {items.map((it) => (
           <li key={it.label}>

@@ -30,8 +30,42 @@ const SWATCH: Record<Theme, string | null> = {
 
 const android = /Android/.test(navigator.userAgent);
 
-export function Settings() {
+/**
+ * The theme strip: one chip per theme, applied on tap. Settings owns the screen version and
+ * the Pane's ⋯ sheet reuses it, so a theme is one tap away from the screen you are reading.
+ */
+export function ThemeChips() {
   const [theme, choose] = useState(getTheme);
+  return (
+    <div role="group" aria-label="Theme" className="hscroll flex gap-2 px-4 pb-1">
+      {THEMES.map((t) => (
+        <button
+          key={t}
+          type="button"
+          // The strip is wider than the phone, so the current theme must not start off-screen.
+          ref={(el) => {
+            if (el && theme === t) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          }}
+          aria-pressed={theme === t}
+          onClick={() => {
+            setTheme(t);
+            choose(t);
+          }}
+          className={`press flex shrink-0 items-center gap-1.5 rounded-chip px-3 py-1.5 text-caption whitespace-nowrap ${
+            theme === t ? 'bg-accent font-semibold text-bg' : 'bg-surface font-medium text-muted'
+          }`}
+        >
+          {SWATCH[t] && (
+            <span aria-hidden className="size-2.5 rounded-full border border-border" style={{ background: SWATCH[t]! }} />
+          )}
+          {LABELS[t]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function Settings() {
   const [prefs, setPrefs] = useState<HubSettings>({ hosts: [], suggest: { enabled: false } });
   const [access, setAccess] = useState('');
   const [haptics, setHaptics] = useState(() => localStorage.getItem('tautan.haptics') !== 'off');
@@ -67,31 +101,7 @@ export function Settings() {
       <TopBar title="Settings" />
 
       <h2 className="label-caps px-4 pt-3.5 pb-2">Theme</h2>
-      <div role="group" aria-label="Theme" className="hscroll flex gap-2 px-4 pb-1">
-        {THEMES.map((t) => (
-          <button
-            key={t}
-            type="button"
-            // The strip is wider than the phone, so the current theme must not start off-screen.
-            ref={(el) => {
-              if (el && theme === t) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-            }}
-            aria-pressed={theme === t}
-            onClick={() => {
-              setTheme(t);
-              choose(t);
-            }}
-            className={`flex shrink-0 items-center gap-1.5 rounded-chip px-3 py-1.5 text-caption whitespace-nowrap ${
-              theme === t ? 'bg-accent font-semibold text-bg' : 'bg-surface font-medium text-muted'
-            }`}
-          >
-            {SWATCH[t] && (
-              <span aria-hidden className="size-2.5 rounded-full border border-border" style={{ background: SWATCH[t]! }} />
-            )}
-            {LABELS[t]}
-          </button>
-        ))}
-      </div>
+      <ThemeChips />
 
       <h2 className="label-caps px-4 pt-6 pb-1">Notifications</h2>
       <Toggle

@@ -30,7 +30,7 @@ describe('isNumberedList', () => {
 describe('quickReplies', () => {
   test('key pills first, then the static set for the Agent', () => {
     expect(labels('claude', { explain: BOX })).toEqual([
-      'Yes', 'No', 'Quit', '↑', '↓',
+      'Yes', 'No', 'Quit',
       'Continue', 'Run the tests', 'Commit and push', 'Explain the diff', 'Stop here',
     ]);
   });

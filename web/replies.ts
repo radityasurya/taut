@@ -59,10 +59,7 @@ export function quickReplies(o: {
     for (const k of offeredKeys(o.explain)) {
       pills.push({ kind: 'key', label: k.label, aria: `${k.label}, ${k.key}`, keys: [k.key], glyph: GLYPH[k.key] ?? k.key });
     }
-    if (isNumberedList(o.explain.detection)) {
-      pills.push({ kind: 'key', label: '↑', aria: 'up', keys: ['up'] });
-      pills.push({ kind: 'key', label: '↓', aria: 'down', keys: ['down'] });
-    }
+    // ↑ ↓ live in the dock's inline keys now, so a numbered list adds no arrow pills.
   }
 
   const texts = [

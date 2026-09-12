@@ -79,18 +79,23 @@ label carries the fact. An offline Host adds a red row linking to Hosts. While
 
 ## Pane (`#/pane/<key>`) — `web/pane.tsx`
 
-Top bar: back, title, and a status line that doubles as the Switch button —
-Dot, the Status word (`aria-live="polite"`), Agent and Workspace. Right side:
-Switch, Read aloud (Agent Panes only) and More. Under it, the **Tab strip**
-lists that Workspace's Tabs, each with a 6 px Dot rolled up from its Panes,
-then `+` for New Tab, then the grid chip at the right end (`80×24`, or
-`80×24 · fit` when pressed). Fit scales the `<pre>` to the room the scroller
-leaves after its own padding, and is **off** until you press it. A horizontal
-**touch** swipe on the strip moves between Tabs: Chromium gives a horizontal
-drag to the nearest scroller and fires `pointercancel`, so the gesture reads
-`touchend`, and it is ignored when the strip itself scrolled, which is what a
-drag means once there are more Tabs than fit. One accent underline slides
-between the Tabs. When the open Tab holds several Panes, a chip row lists them.
+Top bar: one 44 px grid, laid out by width. Row 1 is back · title · the ⌄ that
+opens the Switch drawer · a spacer · **Read aloud** (agent Panes only) and
+**More**. Row 2, under the title, is the status line — Dot, the Status word
+(`aria-live="polite"`), Agent and Workspace — and it opens the Switch drawer
+too. No setting lives in the bar: Wrap, Fit and Theme colors are rows in the ⋯
+sheet, and + belongs to the Tab strip.
+
+Under the top bar the **Tab strip** is one section of two rows. Row 1 is **+**
+for a new Tab (herdr Muxes only) and then that Workspace's Tabs, each with a
+6 px Dot rolled up from its Panes, its label, and its Pane count when it holds
+several; the row carries the hairline the accent underline slides along. Row 2
+lists the Panes of the open Tab as pills, and appears only when the Tab holds
+more than one. A horizontal **touch** swipe on the strip moves between Tabs:
+Chromium gives a horizontal drag to the nearest scroller and fires
+`pointercancel`, so the gesture reads `touchend`, and it is ignored when the
+strip itself scrolled, which is what a drag means once there are more Tabs than
+fit.
 
 The grid renders the `visible` screen as styled ANSI spans, pinned to the
 bottom until you scroll up, when a **New output** pill appears. Content wider
@@ -98,12 +103,24 @@ than the phone fades at the right edge instead of showing a scrollbar. There is
 no Screen/Recent switch: tautan only ever shows the visible grid, and Wrap (in
 More) reflows it client-side.
 
-**Width.** From `lg` up the Pane column is the whole window (`max-w-none`), so
-the grid keeps its own width: the `<pre>` is sized by its content and centred,
-and nothing is scaled while it fits. A 120-column grid is 867 px at 12 px, so a
-desktop shows it whole and Fit stays for the phone, where the window is
-narrower than the grid. The dock surface and the blocked card still cap their
-contents at the reading column, so a 1600 px window does not stretch a button.
+**Width.** The screen is one column: `mx-auto w-full` with, from `lg` up,
+`max-width: clamp(420px, <grid width + 34px>, 100vw)`. The grid width is the
+`<pre>`'s own `scrollWidth`, measured after every screen update, after a resize
+and once `document.fonts.ready` resolves, because the mono subset swaps in after
+first paint. The widest line measured on this Pane wins and keeps winning, so
+the column does not resize on every frame of agent output; a new Pane starts the
+measurement again. 34 px is the scroller's 16 + 16 px of padding plus 2 px for
+the fraction `scrollWidth` rounds away. Before the first measurement, and while
+Wrap is on — where the `<pre>` takes the column's own width and measuring it
+would feed back — the column falls back to 672 px, which is the right width for
+reflowed prose anyway. Below `lg` the column is simply the window.
+
+The header, the Tab strip, the grid, the blocked card and the dock all live in
+that column, so a 2560 px window centres a content-sized Pane and nothing
+stretches. A 120-column grid is 867 px at 12 px, so a desktop shows it whole and
+Fit stays for the phone, where the window is narrower than the grid: it scales
+the `<pre>` to the room the scroller leaves after its own padding, is **off**
+until you ask for it in ⋯, and the row there is hinted with the grid size.
 
 Wrap reflows the same text to the column, never wider than the Pane's own
 `cols`. It needs `w-full`: `w-max` is `max-content`, which never wraps.
@@ -111,6 +128,9 @@ Wrap reflows the same text to the column, never wider than the Pane's own
 | Setting | Default | Key |
 |---|---|---|
 | Fit | off | `tautan.fit` = `on` \| `off` |
+| Theme colors | on | `tautan.themedColors` = `on` \| `off` |
+| Key bar, agent Panes | collapsed | `tautan.keys.agent` = `on` \| `off` |
+| Key bar, shell Panes | open | `tautan.keys.shell` = `on` \| `off` |
 | Wrap, agent Panes | on | `tautan.wrap.agent` = `on` \| `off` |
 | Wrap, shell Panes | off | `tautan.wrap.shell` = `on` \| `off` |
 | Smart replies | off | `tautan.smart` = `on` \| `off` |
@@ -132,10 +152,20 @@ duplicates, because the footer's `esc to cancel` and `enter to confirm` are the
 preset under another name. The id alone is not enough: a real Claude Code
 permission box matches `live_blocked_form`, never `bash_permission_prompt`.
 
-The dock is the only place with input. Agent Panes stack **quick-reply pills ·
-composer · key bar**; shell Panes have the key bar alone (a longer set). The key
-bar comes last because on a phone it then rides directly above the keyboard,
-like an accessory row, with the composer it types into just over it.
+The dock is the only place with input, and it is one bar plus what it opens:
+
+| Row | Agent Pane | Shell Pane |
+|---|---|---|
+| 1 | `esc` `↑` `↓` `enter` and the keys toggle, then a hairline, then the quick-reply pills | `esc` `tab` `enter` and the toggle; no pills |
+| 2 | the whole preset, while the toggle is on | the same, open by default |
+| 3 | the composer | — |
+
+The pills scroll at the right of the row behind the same right-edge fade the
+grid uses (`FADE`). The toggle carries `aria-expanded` and remembers its state
+per kind (`tautan.keys.agent`, `tautan.keys.shell`), and the row it opens rises
+into place with `.rise`, which reduced motion turns off. An agent Pane starts
+collapsed, because there the keyboard should meet the composer; a shell Pane
+starts open, because keys are all it has.
 
 **Quick replies** (`web/replies.ts`, a pure function; `web/pane.tsx` renders
 them) scroll horizontally in one row, 8 px radius, 13 px:
@@ -161,7 +191,19 @@ appear only while **Smart replies** is on (`tautan.smart`); a blocked Pane with 
 drafts for the current revision asks the Hub for one, once, with
 `POST /api/panes/:key/suggest`.
 
-The composer has dictation into the field, an attach button, and Send. Enter
+**Theme colors** (on by default, `tautan.themedColors`, toggled in ⋯) snaps every
+256-colour and truecolour span to the nearest of the theme's own 16, so one Pane
+reads as one picture instead of carrying whichever palette the agent shipped.
+`web/pane.tsx` reads `--ansi-0` … `--ansi-15` off `<html>` once per theme, picks
+the nearest by squared RGB distance, and memoises the answer per colour string,
+because a screen repeats the same few colours thousands of times. Palette
+indices 0–15 already resolve through the same variables and are left alone. Off,
+the span renders exactly what the agent sent. A palette with no orange, such as
+the Catppuccin sixteen, sends a peach 256-colour to its pink slot; that is the
+rule working, and the toggle is there for when you want the agent's own colours.
+
+The composer has the agent's glyph inside the field, before the placeholder,
+dictation into the field, an attach button, and Send. Enter
 sends; Shift+Enter inserts a newline. The mic replaces Send only while the
 field is empty **and** the browser has `webkitSpeechRecognition`; with no
 engine the disabled Send button keeps its place rather than offering a mic that
@@ -313,8 +355,9 @@ The forwarder flags and the socket paths are in
 
 ## Settings (`#/settings`) — `web/settings.tsx`
 
-Theme chips (System plus six themes, each with its own `--bg` as the swatch;
-the current one scrolls itself into view), a push toggle, a Haptics toggle on
+Theme chips (`ThemeChips`: System plus six themes, each with its own `--bg` as
+the swatch; the current one scrolls itself into view; the Pane's ⋯ sheet shows
+the same strip), a push toggle, a Haptics toggle on
 Android only, the iOS install hint, a **Smart replies** toggle, and the **Access**
 rows. Hosts live on their own tab, not here.
 
@@ -374,8 +417,10 @@ title and the meta line.
 - **New Workspace**: directory, label, an **As git worktree** switch, and the
   branch field it reveals.
 - **Rename**: one field, for a Workspace, Tab or Pane.
-- **More**: the ⋯ menu — Wrap, Rename, Close Pane, and a disabled
-  `Resize to phone` marked `v2`.
+- **More**: the ⋯ menu — the theme chips (`ThemeChips` from `web/settings.tsx`,
+  the same strip the Settings screen shows), then Wrap, **Fit to width** with the
+  grid size as its hint, **Theme colors**, Diff, Rename, Close Pane, and a
+  disabled `Resize to phone` marked `v2`.
 - **Close Pane** is a Dialog, not a drawer, so a destructive action cannot be
   swiped into by accident.
 
@@ -386,7 +431,7 @@ Hub's `{error}` code on a failure, `network` when the fetch never landed.
 
 | Flow | Entry point | Defaults | On success |
 |---|---|---|---|
-| New Tab | `+` at the end of the Tab strip, or long-press a Workspace header → **New Tab** | directory = the Workspace's `cwd`; Agent chip = the Agent most of that Workspace's Panes run, else `shell only` | opens the new Pane from `{paneKey}` |
+| New Tab | `+` at the start of the Pane's Tab strip, or long-press a Workspace header → **New Tab** | directory = the Workspace's `cwd`; Agent chip = the Agent most of that Workspace's Panes run, else `shell only` | opens the new Pane from `{paneKey}` |
 | New Workspace | `+` in the Agents header | directory = the parent of the first listed Workspace's `cwd`; worktree off | expands the new group and scrolls it into view once `state` carries it |
 | Rename | long-press a Workspace header → **Rename**; ⋯ → **Rename** on a Pane | the current name, 80 characters at most | the new name arrives with the next `state` |
 | Close Pane | ⋯ → **Close Pane** → the confirm Dialog | — | returns to Agents |
@@ -404,7 +449,7 @@ gone Mux or Pane says so, and anything else is "That did not work · `<code>`".
 No toast, like the push toggle's caption.
 
 A `tmux` Mux answers 501 to all four, so tautan does not offer them: the Tab
-strip `+`, **New Tab**, **Rename** and **Close Pane** are absent there, and the
+strip's `+`, **New Tab**, **Rename** and **Close Pane** are absent there, and the
 Agents header `+` needs one herdr Mux to appear. Collapse, Wrap and every read
 stay. A Tab has no menu of its own yet, so Tab rename is unreachable from the
 phone even though `POST /api/rename` takes a `tabId`.
