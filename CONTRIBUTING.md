@@ -49,34 +49,23 @@ Contract tests need `herdr` and `tmux` on PATH; they skip when a binary is missi
 
 ## Release
 
-A release is one tag. The workflow does the rest.
+1. Bump `version` in `package.json` and add the entry to `CHANGELOG.md`.
+2. Commit, then `git tag v<version> && git push origin main v<version>`.
+3. The release workflow builds and pushes `ghcr.io/radityasurya/tautan:<version>` and
+   `:latest`, publishes to npm, and creates the GitHub release with generated notes.
 
-1. Bump `version` in `package.json`.
-2. Add a section to `CHANGELOG.md` for the new version, in user terms: what you can now do.
-3. Commit both, then tag and push:
+npm publishing uses trusted publishing (OIDC), so the workflow holds no token. One-time
+setup, done for the first release:
 
-   ```sh
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
+1. On your machine: `npm login`, then `npm publish --access public` from a clean checkout at
+   the tag. This creates the package.
+2. On npmjs.com, open the package → Settings → Trusted publishers → GitHub Actions, and
+   enter owner `radityasurya`, repository `tautan`, workflow `release.yml`.
+3. From the next tag on, the workflow publishes by itself. If the package settings are
+   missing, the `npm` job fails with an authentication error and nothing else is affected.
 
-`.github/workflows/release.yml` runs on any `v*` tag and does three things:
-
-- Builds the container image and pushes it to `ghcr.io/radityasurya/tautan`, tagged with the
-  version and `latest`. This needs no setup; it uses the workflow's own `GITHUB_TOKEN`.
-- Publishes the package to npm with `--provenance`, but only if the `NPM_TOKEN` repository
-  secret exists. Without it the step logs a skip and the job still passes.
-- Creates a GitHub release with generated notes.
-
-To publish to npm, add the secret once:
-
-1. On npmjs.com, create a **granular access token** with read and write access to the
-   `tautan` package. Give it the shortest expiry you can live with.
-2. In this repository, open **Settings → Secrets and variables → Actions → New repository
-   secret**.
-3. Name it `NPM_TOKEN` and paste the token.
-
-Rotate the token when it expires; the workflow reads it fresh on every run.
+The first GHCR push creates a private package; make it public in the package settings if
+you want `docker pull` to work without a login.
 
 ## Reporting a bug
 

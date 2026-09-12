@@ -35,7 +35,13 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   npm:
+    # Publishes through npm trusted publishing (OIDC): no token, no secret. Register this
+    # workflow once on npmjs.com under the package's Trusted publishers, after the first
+    # manual publish creates the package. See CONTRIBUTING.md "Release".
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -44,16 +50,10 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest # trusted publishing needs npm 11.5+
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "NPM_TOKEN secret not set; skipping npm publish"
-            exit 0
-          fi
-          npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish --provenance --access public
 
   release:
     runs-on: ubuntu-latest
