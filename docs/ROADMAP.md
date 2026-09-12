@@ -227,6 +227,17 @@ npm publish with `--provenance` through trusted publishing (OIDC, no secret), Gi
 generated notes), README "Install" with the three paths and the Unraid template, and
 `CHANGELOG.md` 0.1.0.
 
+## Phase 10 — tappable agent status items
+
+- [ ] Research: which keys Claude Code (and Pi) bind to their status-line items — background
+      shells, subagents, the tasks list — and how the items look in the rendered screen
+- [ ] Recognise those items in the last rows of the grid and render them as tappable tokens
+      that send the agent's own shortcut; agent-specific patterns live in `web/replies.ts`
+      next to the static quick replies, and only the items whose key is known become tappable
+
+Verify: on a Claude Code pane with a running background shell, tapping "[1 shell]" on the
+phone opens Claude Code's task list in the pane.
+
 ## Later (explicitly out of v1)
 
 - Split / move / layout editing
