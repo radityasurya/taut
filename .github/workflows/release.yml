@@ -53,7 +53,13 @@ jobs:
       - run: npm install -g npm@latest # trusted publishing needs npm 11.5+
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: npm publish --provenance --access public
+      - run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "tautan@$version" version >/dev/null 2>&1; then
+            echo "tautan@$version is already on npm; skipping publish"
+            exit 0
+          fi
+          npm publish --provenance --access public
 
   release:
     runs-on: ubuntu-latest
