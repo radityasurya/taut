@@ -23,6 +23,15 @@ phone. This file is the vocabulary. It holds no implementation detail.
   output as reflowed text.
 - **Explain** — the Mux's account of why a Pane is `blocked`: the rule that matched, the
   region it looked at, and the keys the prompt offers.
+- **Affordance** — a tappable region tautan derived from a Screen, together with the input it
+  sends when tapped: a key, a typed command, or a mouse click at a cell.
+- **Hint** — a key-to-action pair an app printed on its own Screen (`esc to cancel`,
+  `<d> Describe`, `F9Kill`). Hints are the main source of Affordances.
+- **App profile** — what tautan knows about a program by its command name: whether mouse
+  forwarding is on, extra Hint patterns, static keys and quick replies. Claude Code, Pi,
+  k9s and htop are App profiles; an unknown program gets the generic profile.
+- **Mouse forwarding** — turning a tap on the grid into a mouse report the app understands
+  (SGR press and release). Only on for App profiles that enable it.
 
 ## Banned words
 

@@ -227,16 +227,29 @@ npm publish with `--provenance` through trusted publishing (OIDC, no secret), Gi
 generated notes), README "Install" with the three paths and the Unraid template, and
 `CHANGELOG.md` 0.1.0.
 
-## Phase 10 — tappable agent status items
+## Phase 10 — interactive screen
 
-- [ ] Research: which keys Claude Code (and Pi) bind to their status-line items — background
-      shells, subagents, the tasks list — and how the items look in the rendered screen
-- [ ] Recognise those items in the last rows of the grid and render them as tappable tokens
-      that send the agent's own shortcut; agent-specific patterns live in `web/replies.ts`
-      next to the static quick replies, and only the items whose key is known become tappable
+Design: [ADR 0003](./adr/0003-interactivity-from-recognised-text-and-mouse-forwarding.md);
+terms Affordance, Hint, App profile, Mouse forwarding in [../CONTEXT.md](../CONTEXT.md).
 
-Verify: on a Claude Code pane with a running background shell, tapping "[1 shell]" on the
-phone opens Claude Code's task list in the pane.
+- [ ] App profiles (`web/profiles.ts`): by command name; mouse on/off, hint patterns, static
+      keys and quick replies (the per-agent sets move here); generic fallback
+- [ ] Hints → Affordances: four generic patterns; in place on the grid with a 44 px hit area,
+      and as pills in the dock ahead of the quick replies
+- [ ] Option lists with a `❯` cursor: tap a line to move the cursor there (arrow keys relative
+      to the current row); long-press moves and confirms with Enter
+- [ ] Mouse forwarding through `pane.send_input`: SGR press + release on tap, right click on
+      long-press, wheel on vertical drag, double click on double tap; only for profiles with
+      mouse on or the per-Pane switch; off while Wrap is on; Fit scale compensated
+- [ ] Claude Code status items: `N shells` / `N agents` → `/tasks` + Enter; `auto mode on` →
+      Shift+Tab; footer badges → Footer navigation keys
+- [ ] URLs and paths: tap to copy, long-press to open (URLs)
+- [ ] Contract test on a throwaway herdr: htop selection moves on a forwarded tap; an unknown
+      program never receives mouse bytes
+
+Verify: on the phone, tap a k9s row and it selects; tap `<d>` in its header and the describe
+view opens; tap option 2 in a Claude Code permission prompt and the cursor moves; tap
+`1 shell` and the tasks panel opens.
 
 ## Later (explicitly out of v1)
 
