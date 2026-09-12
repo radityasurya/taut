@@ -236,14 +236,17 @@ checklist before you expose a Hub.
 
 ## Status
 
-Version 0.1.0. Phases 0 to 8 are built: every screen, a local herdr, triage, push,
-attachments, remote Hosts over SSH, tmux, write operations, and diff review. See
-[CHANGELOG.md](CHANGELOG.md).
+Version 0.1.1, released 2026-09-12 on [npm](https://www.npmjs.com/package/tautan),
+[GHCR](https://github.com/radityasurya/tautan/pkgs/container/tautan) and
+[GitHub releases](https://github.com/radityasurya/tautan/releases). Every phase of
+[docs/ROADMAP.md](docs/ROADMAP.md) is built: every screen, a local herdr, triage, push,
+attachments, quick replies, remote Hosts over SSH, tmux, write operations, diff review, and
+packaging. See [CHANGELOG.md](CHANGELOG.md).
 
-Items marked `[~]` in [docs/ROADMAP.md](docs/ROADMAP.md) are built and driven in an emulated
-phone, but not yet confirmed on a real device: the Explain card, Seen, tab swipes, dictation
-and read-aloud, an installed PWA receiving a push, a real photo attachment, and the SSH
-forwarder reconnect.
+Confirmed on a real iPhone: the installed PWA, the Agents and Pane screens, and a push
+notification on a blocked agent. Items marked `[~]` in the roadmap are built and driven in an
+emulated phone but not yet confirmed on a device: the Explain card, Seen, tab swipes,
+dictation and read-aloud, a photo attachment, smart replies, and the SSH forwarder reconnect.
 
 Two known limits: tmux reports Status `unknown` for every Pane, and a Pane cannot be resized
 to the phone's width, because herdr 0.9 shares one width between all clients.

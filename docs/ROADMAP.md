@@ -1,5 +1,8 @@
 # Roadmap
 
+**Status (2026-09-12):** every phase is built; 0.1.1 is released. `[~]` marks work that is
+built and verified in an emulated phone but not yet on a real device.
+
 Each phase is a tracer bullet: it ships something you can use from the phone, end to end.
 Tick a box when the verification step passes on a real device. Details of the design live
 in [ARCHITECTURE.md](./ARCHITECTURE.md); vocabulary in [../CONTEXT.md](../CONTEXT.md).
@@ -21,8 +24,8 @@ anything is wired. Later phases replace mock data with real calls; the screens s
 - [x] Settings: theme chips (all six + system), push toggle, haptics toggle, "add to Home
       Screen" hint, trusted login and served-by rows. Hosts live in their own tab as cards
 - [x] Sheets: new Tab, new Workspace / worktree, rename, close confirm
-- [ ] PWA shell: manifest, icons, safe-area insets are in; standalone display is verified on a
-      device in phase 3
+- [x] PWA shell: manifest, icons, safe-area insets; installed to an iPhone home screen and
+      running standalone (2026-09-11)
 - [x] Floating bottom tab bar on Home, phone style: Panes · Hosts · Settings, with a badge
       for unseen `blocked`
 - [x] Agent-aware Pane chrome: when the Pane runs Claude Code or Pi, the composer reads as
