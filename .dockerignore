@@ -1,0 +1,12 @@
+node_modules
+dist
+test
+docs
+.git
+*.log
+.DS_Store
+.mcp.json
+components.json
+skills-lock.json
+scratch*
+tmp

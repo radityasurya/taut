@@ -1,0 +1,33 @@
+services:
+  tautan:
+    image: ghcr.io/radityasurya/tautan:latest
+    network_mode: host
+    # Must match the UID that owns the herdr socket on the host; change to your UID.
+    user: "1000:1000"
+    environment:
+      # Keep tautan on loopback when exposing it through `tailscale serve`.
+      TAUTAN_BIND: 127.0.0.1
+      HERDR_SOCKET_PATH: /herdr/herdr.sock
+    volumes:
+      - ~/.config/herdr:/herdr:ro
+      - ~/.ssh:/home/tautan/.ssh:ro
+      - tautan-data:/data
+    restart: unless-stopped
+
+volumes:
+  tautan-data:
+
+# Unraid Community Applications template fields:
+#   Repository: ghcr.io/radityasurya/tautan:latest
+#   Network Type: Host
+#   Paths:
+#     /herdr                 <- /root/.config/herdr (or the herdr user's config dir), read-only
+#     /home/tautan/.ssh      <- the host user's .ssh directory, read-only
+#     /data                  <- /mnt/user/appdata/tautan
+#   Variables:
+#     TAUTAN_BIND            = 127.0.0.1
+#     HERDR_SOCKET_PATH      = /herdr/herdr.sock
+#     TAUTAN_SUGGEST         = optional
+#     TAUTAN_SUGGEST_KEY     = optional
+#   UID note: set the container user/PUID to the UID that owns herdr.sock. This image's
+#   `tautan` user is UID 1000; Unraid commonly runs services as another UID.

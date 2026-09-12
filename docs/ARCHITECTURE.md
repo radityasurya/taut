@@ -224,6 +224,28 @@ variables.
 | `$XDG_CACHE_HOME/tautan/` | `attachments/<unix-ms>-<name>` |
 | `$XDG_RUNTIME_DIR/tautan/` | one forwarded socket per remote Mux, `<hostId>-<session>.sock`, beside its `cm-*` ControlMaster socket. With no `XDG_RUNTIME_DIR` the directory is `/tmp/tautan-<uid>`; either way it is mode 0700, because a unix socket a second user can open is a second user on the Mux |
 
+### In the container
+
+The image sets the four XDG variables to directories under one volume, so everything the Hub
+writes lands in `/data`:
+
+| Container path | XDG variable | Content |
+|---|---|---|
+| `/data/config/tautan/hosts.json` | `XDG_CONFIG_HOME=/data/config` | the `HostConfig` array |
+| `/data/state/tautan/state.json` | `XDG_STATE_HOME=/data/state` | `seen`, the VAPID pair, `subscriptions`, `trustedUser` |
+| `/data/cache/tautan/attachments/` | `XDG_CACHE_HOME=/data/cache` | uploaded files, never pruned |
+| `/data/run/tautan/` | `XDG_RUNTIME_DIR=/data/run` | forwarded sockets and ControlMaster sockets |
+
+Two paths come from the host instead, both read-only: the herdr configuration directory at
+`/herdr` (`HERDR_SOCKET_PATH=/herdr/herdr.sock` points the Hub at the socket in it) and the
+Hub user's SSH directory at `/home/tautan/.ssh`. The container runs as uid 1000, which must
+be the uid that owns the herdr socket, because socket file permissions are the only boundary
+there.
+
+`/data/run` is a volume, not a tmpfs, so a forwarded socket can outlive a restart. The Hub
+recreates the directory at mode 0700 and re-dials each Host on start, so a stale socket file
+is replaced, not reused.
+
 ## Environment
 
 | Variable | Default | What |

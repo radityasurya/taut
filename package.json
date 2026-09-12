@@ -3,6 +3,22 @@
   "version": "0.1.0",
   "description": "Mobile-first PWA hub for herdr (and tmux): see every coding agent's state from your phone and reply, over Tailscale.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/radityasurya/tautan.git"
+  },
+  "homepage": "https://github.com/radityasurya/tautan",
+  "bugs": {
+    "url": "https://github.com/radityasurya/tautan/issues"
+  },
+  "keywords": [
+    "herdr",
+    "tmux",
+    "pwa",
+    "tailscale",
+    "coding-agents",
+    "mobile"
+  ],
   "type": "module",
   "bin": {
     "tautan": "server/main.ts"
@@ -22,6 +38,7 @@
     "dev:server": "bun --watch server/main.ts",
     "dev:web": "vite",
     "build": "vite build",
+    "prepublishOnly": "pnpm build",
     "start": "bun server/main.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"

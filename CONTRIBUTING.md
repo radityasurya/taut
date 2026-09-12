@@ -47,6 +47,37 @@ Contract tests need `herdr` and `tmux` on PATH; they skip when a binary is missi
 - Tick the roadmap box in the same pull request, only if you verified on a real device.
 - Describe what you verified and how, not what you changed; the diff shows that.
 
+## Release
+
+A release is one tag. The workflow does the rest.
+
+1. Bump `version` in `package.json`.
+2. Add a section to `CHANGELOG.md` for the new version, in user terms: what you can now do.
+3. Commit both, then tag and push:
+
+   ```sh
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+
+`.github/workflows/release.yml` runs on any `v*` tag and does three things:
+
+- Builds the container image and pushes it to `ghcr.io/radityasurya/tautan`, tagged with the
+  version and `latest`. This needs no setup; it uses the workflow's own `GITHUB_TOKEN`.
+- Publishes the package to npm with `--provenance`, but only if the `NPM_TOKEN` repository
+  secret exists. Without it the step logs a skip and the job still passes.
+- Creates a GitHub release with generated notes.
+
+To publish to npm, add the secret once:
+
+1. On npmjs.com, create a **granular access token** with read and write access to the
+   `tautan` package. Give it the shortest expiry you can live with.
+2. In this repository, open **Settings → Secrets and variables → Actions → New repository
+   secret**.
+3. Name it `NPM_TOKEN` and paste the token.
+
+Rotate the token when it expires; the workflow reads it fresh on every run.
+
 ## Reporting a bug
 
 Open an issue with: Hub OS and Bun version, herdr or tmux version, phone and browser,
