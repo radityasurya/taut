@@ -92,10 +92,8 @@ Verify: trigger a permission prompt in a real Pane; the card shows buttons; a ta
 - [x] Push only on Status → `blocked`; app badge for unseen `blocked` + `done` —
       `server/mux.ts` sends on the transition only; `web/app.tsx` writes the badge from
       SSE state with `setBadge()` from `web/push.ts`
-- [~] Installed PWA receives a notification — an emulated Pixel on a real Hub registered
-      `sw.js`, subscribed to FCM, got 204 from `POST /api/push/subscribe` and left the
-      endpoint in `state.json`; turning the toggle off pruned it again. A real iPhone and
-      a real Android, and the tap that opens the Pane, are pending
+- [x] Installed PWA receives a notification — confirmed on the maintainer's iPhone on
+      2026-09-11 after the VAPID subject fix (Apple rejects a `mailto:` subject without a domain)
 
 Verify: installed PWA on iPhone and Android receives a notification; tapping opens the Pane.
 
