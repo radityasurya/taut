@@ -414,6 +414,7 @@ export function Home({ state }: { state: State | null }) {
                 { label: 'Rename', onClick: () => setRename(menu) },
               ]
             : []),
+          { label: 'Diff', onClick: () => menu && navigate(`#/diff/${encodeURIComponent(menu.key)}`) },
           { label: collapsed.includes(menu?.key ?? '') ? 'Expand' : 'Collapse', onClick: () => menu && toggle(menu.key) },
         ]}
       />

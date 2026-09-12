@@ -320,6 +320,16 @@
   }
 }
 
+/* Diff rows. 12 % of the status colour over whatever surface is under them, so one pair
+   of tints works in all seven themes and the text keeps its own contrast. */
+@utility diff-add {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+@utility diff-del {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
 /* Screen push. One direction, because a phone only ever goes deeper or back, and the
    back animation reading as a push is cheaper than tracking the direction. */
 ::view-transition-old(root) {

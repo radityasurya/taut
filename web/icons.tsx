@@ -72,6 +72,14 @@ export const More = ({ size = 20, ...rest }: Props) => (
   </svg>
 );
 
+/** The refresh circle, Lucide's `rotate-cw` geometry, so it matches the stroked set. */
+export const Refresh = (p: Props) => (
+  <Icon {...p}>
+    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+    <path d="M21 3v5h-5" />
+  </Icon>
+);
+
 export const Search = (p: Props) => (
   <Icon size={18} strokeWidth={2} {...p}>
     <circle cx="11" cy="11" r="6.5" />

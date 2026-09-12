@@ -2,6 +2,7 @@
 // Nothing imports this in production: `installMock()` is a no-op unless the page is
 // opened with `?mock` (or built with VITE_MOCK=1).
 import type {
+  DiffFile, DiffHunk, DiffLine, DiffResult, DiffScope,
   Explain, InputBody, NewTabBody, NewWorkspaceBody, ProbeBody, ProbeResult, RenameBody, Screen, ScreenEvent,
   ScreenMode, SeenBody, Settings, SettingsBody, State, StatePane, Status, SuggestSettingBody,
 } from '../shared/types.ts';
@@ -273,6 +274,204 @@ export const mockScreens: Record<string, Record<ScreenMode, Screen>> = Object.fr
 );
 
 /** The fixtures must keep exercising every branch of the UI. Cheaper than a test file. */
+// ---- diffs ----
+// One fixture per Workspace and scope, in the shape `shared/diff.ts` produces. A line is
+// written with its git prefix, and the builder counts the two line numbers from the hunk
+// header, the way a real unified diff does.
+
+function hunk(header: string, oldStart: number, newStart: number, body: string[]): DiffHunk {
+  let o = oldStart;
+  let n = newStart;
+  return {
+    header,
+    lines: body.map((raw): DiffLine => {
+      const text = raw.slice(1);
+      if (raw[0] === '+') return { type: 'add', text, newNo: n++ };
+      if (raw[0] === '-') return { type: 'del', text, oldNo: o++ };
+      if (raw[0] === '\\') return { type: 'meta', text: raw };
+      return { type: 'ctx', text, oldNo: o++, newNo: n++ };
+    }),
+  };
+}
+
+/** Sum the markers, so a fixture can never disagree with its own counts. */
+function file(path: string, hunks: DiffHunk[], extra: Partial<DiffFile> = {}): DiffFile {
+  const lines = hunks.flatMap((h) => h.lines);
+  return {
+    path,
+    additions: lines.filter((l) => l.type === 'add').length,
+    deletions: lines.filter((l) => l.type === 'del').length,
+    hunks,
+    ...extra,
+  };
+}
+
+const RENAMED = file(
+  'web/pane.tsx',
+  [
+    hunk('@@ -18,7 +18,9 @@ export function PaneScreen({ paneKey, state }: Props) {', 18, 18, [
+      '   const [wrap, setWrap] = useState(false);',
+      '   const [fit, setFit] = useState(false);',
+      '-  const [fade, setFade] = useState(false);',
+      '+  const [fade, setFade] = useState(false);',
+      '+  const [fresh, setFresh] = useState(false);',
+      '+',
+      '   const box = useRef<HTMLDivElement>(null);',
+      '   const pre = useRef<HTMLPreElement>(null);',
+      '   const pinned = useRef(true);',
+    ]),
+  ],
+  { oldPath: 'web/screen.tsx' },
+);
+
+const MULTI_HUNK = file('server/http.ts', [
+  hunk('@@ -42,6 +42,7 @@ function json(value: unknown, status = 200): Response {', 42, 42, [
+    '   return Response.json(value, { status });',
+    ' }',
+    ' ',
+    '+const DIFF_FILE_CAP = 50;',
+    ' ',
+    ' export function serve(hub: Hub): Server {',
+    '   const server = Bun.serve({',
+  ]),
+  hunk('@@ -118,10 +119,20 @@ export function serve(hub: Hub): Server {', 118, 119, [
+    "     const workspace = url.pathname.match(/^\\/api\\/workspaces\\/([^/]+)\\/diff$/);",
+    "     if (workspace && request.method === 'GET') {",
+    "-      return json({ error: 'unsupported' }, 501);",
+    "+      const key = decodeURIComponent(workspace[1]!);",
+    "+      const found = hub.workspace(key);",
+    "+      if (!found?.cwd) return json({ error: 'unknown-workspace' }, 404);",
+    "+      try {",
+    "+        const scope = url.searchParams.get('scope') ?? 'working';",
+    "+        return json(await hub.diff(found, scope, url.searchParams.get('file')));",
+    "+      } catch (error) {",
+    "+        const code = String(error).split(': ')[0]!;",
+    "+        return json({ error: code }, code === 'not-a-repo' ? 409 : 502);",
+    "+      }",
+    '     }',
+    ' ',
+    '     return new Response(null, { status: 404 });',
+    '   },',
+  ]),
+]);
+
+const STAGED_TYPES = file('shared/types.ts', [
+  hunk('@@ -84,6 +84,14 @@ export interface AttachResult { path: string; bytes: number }', 84, 84, [
+    ' /** POST /api/push/subscribe */',
+    ' export interface PushSubscriptionBody {',
+    '   endpoint: string; expirationTime?: number | null;',
+    "+export type DiffScope = 'working' | 'staged' | 'base';",
+    "+export interface DiffLine { type: 'ctx' | 'add' | 'del' | 'meta'; text: string; oldNo?: number; newNo?: number }",
+    '+export interface DiffHunk { header: string; lines: DiffLine[] }',
+    '+export interface DiffFile {',
+    '+  path: string; oldPath?: string; additions: number; deletions: number; binary?: boolean;',
+    '+  hunks: DiffHunk[];',
+    '+}',
+    '+export interface DiffResult { scope: DiffScope; base?: string; files: DiffFile[]; truncated: boolean }',
+    '+',
+    '   keys: { p256dh: string; auth: string };',
+    ' }',
+  ]),
+]);
+
+const BASE_FILES: DiffFile[] = [
+  file('docs/ROADMAP.md', [
+    hunk('@@ -195,9 +195,9 @@ ## Phase 8 — diff review', 195, 195, [
+      '   the Workspace cwd, local or over SSH; `GET /api/workspaces/:key/diff?scope=`',
+      '-- [ ] PWA renders it with `gitdiff-parser` + `react-diff-view` (MIT), unified view on the',
+      '-      phone, per-file collapse, hunk headers',
+      '+- [x] the Hub parses the unified diff with a hand-written `shared/diff.ts`; the PWA renders',
+      '+      it itself in `web/diff.tsx`, per-file collapse, hunk headers',
+      ' - [x] hunk itself is a TUI with no web or JSON mode, so it is not embedded',
+    ]),
+  ]),
+  // A new file: git names `/dev/null` as the old path, which is not a rename.
+  file('web/diff.tsx', [
+    hunk('@@ -0,0 +1,6 @@', 0, 1, [
+      "+import type { DiffFile, DiffResult, DiffScope } from '../shared/types.ts';",
+      "+import { api } from './app.tsx';",
+      '+',
+      '+export function Diff({ workspaceKey }: { workspaceKey: string }) {',
+      "+  const [scope, setScope] = useState<DiffScope>('working');",
+      '+  const [wrap, setWrap] = useState(false);',
+      '\\ No newline at end of file',
+    ]),
+  ], { oldPath: '/dev/null' }),
+  file('web/public/taut-box.woff2', [], { binary: true, oldPath: 'web/public/taut-box.woff2' }),
+];
+
+/** The Workspace whose diff is cut short, so `?mock&open=diff` always lands on that state. */
+const CUT: DiffFile[] = [
+  file('src/pages/listings.astro', [
+    hunk('@@ -31,7 +31,11 @@ const listings = await getCollection("listings");', 31, 31, [
+      '   <section class="grid">',
+      '     {listings.map((listing) => (',
+      '-      <Card listing={listing} />',
+      '+      <Card listing={listing} priority={listing.data.featured} />',
+      '+    ))}',
+      '+  </section>',
+      '+  <section class="grid grid--archive">',
+      '+    {archived.map((listing) => (',
+      '+      <Card listing={listing} muted />',
+      '     ))}',
+      '   </section>',
+    ]),
+  ]),
+  file('src/components/Card.astro', [
+    hunk('@@ -4,8 +4,11 @@ interface Props {', 4, 4, [
+      '   listing: CollectionEntry<"listings">;',
+      '-  featured?: boolean;',
+      '+  priority?: boolean;',
+      '+  muted?: boolean;',
+      ' }',
+      ' ',
+      '-const { listing, featured } = Astro.props;',
+      '+const { listing, priority = false, muted = false } = Astro.props;',
+      ' ',
+      ' const href = `/listings/${listing.slug}`;',
+    ]),
+  ]),
+  file('package.json', [
+    hunk('@@ -12,8 +12,8 @@', 12, 12, [
+      '   "dependencies": {',
+      '-    "astro": "^5.2.0",',
+      '-    "sharp": "^0.33.0"',
+      '+    "astro": "^5.6.1",',
+      '+    "sharp": "^0.34.2"',
+      '   },',
+    ]),
+  ]),
+];
+
+/** What `?file=<path>` answers for a cut file: the same file with the rest of its hunks. */
+const WHOLE: Record<string, DiffFile> = {
+  'src/pages/listings.astro': file('src/pages/listings.astro', [
+    ...CUT[0]!.hunks,
+    hunk('@@ -58,6 +62,9 @@ const listings = await getCollection("listings");', 58, 62, [
+      '   <footer>',
+      '     <p>{listings.length} listings</p>',
+      '+    <p class="muted">{archived.length} archived</p>',
+      '+    <a href="/listings/archive">See the archive</a>',
+      '+',
+      '   </footer>',
+      ' </Layout>',
+    ]),
+  ]),
+};
+
+const MOCK_DIFFS: Record<string, Partial<Record<DiffScope, DiffResult>>> = {
+  'mbp/herdr/taut': {
+    working: { scope: 'working', files: [RENAMED, MULTI_HUNK], truncated: false },
+    staged: { scope: 'staged', files: [STAGED_TYPES], truncated: false },
+    base: { scope: 'base', base: 'main', files: BASE_FILES, truncated: false },
+  },
+  'mbp/herdr/digivaley': {
+    working: { scope: 'working', files: CUT, truncated: true },
+    staged: { scope: 'staged', files: [], truncated: false },
+    base: { scope: 'base', base: 'main', files: CUT.slice(0, 2), truncated: false },
+  },
+};
+
 export function assertMockInvariants(): void {
   const statuses = new Set(mockState.panes.map((p) => p.status));
   const problems = [
@@ -285,6 +484,9 @@ export function assertMockInvariants(): void {
       (l) => strip(l).length >= 120)) || 'a 120-column grid',
     mockState.panes.every((p) => mockScreens[p.key]) || 'a Screen per Pane',
     mockState.panes.every((p) => mockState.tabs.some((t) => t.muxKey === p.muxKey && t.id === p.tabId)) || 'a Tab per Pane',
+    Object.values(MOCK_DIFFS).some((d) => d.working?.truncated) || 'a cut diff',
+    Object.values(MOCK_DIFFS).some((d) => d.staged?.files.length === 0) || 'an empty diff scope',
+    Object.keys(MOCK_DIFFS).every((key) => mockState.workspaces.some((w) => w.key === key)) || 'a Workspace per diff',
   ].filter((p) => p !== true);
   if (problems.length) throw new Error(`mock fixtures lost ${problems.join(', ')}`);
 }
@@ -609,6 +811,21 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
     );
   }
 
+  // git runs in the Workspace cwd, so a Workspace the fixture has no repo for answers 409.
+  const diff = url.pathname.match(/^\/api\/workspaces\/([^/]+)\/diff$/);
+  if (method === 'GET' && diff) {
+    const key = decodeURIComponent(diff[1]!);
+    if (!s.state.workspaces.some((w) => w.key === key)) return json({ error: 'unknown-workspace' }, 404);
+    const scopes = MOCK_DIFFS[key];
+    if (!scopes) return json({ error: 'not-a-repo' }, 409);
+    const scope = (['working', 'staged', 'base'] as DiffScope[]).find((v) => v === url.searchParams.get('scope')) ?? 'working';
+    const result = scopes[scope] ?? { scope, files: [], truncated: false };
+    const one = url.searchParams.get('file');
+    if (!one) return json(result);
+    const whole = WHOLE[one] ?? result.files.find((f) => f.path === one);
+    return whole ? json({ ...result, files: [whole], truncated: false }) : json({ error: 'unknown-file' }, 404);
+  }
+
   const wrote = write(s, url, method, body);
   if (wrote) return wrote;
 
@@ -667,7 +884,8 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
 
 /**
  * The `open` query param, so a screenshot can land on an open drawer:
- * `switch`, `more`, `newtab`, `newworkspace`, `add-host`. `?mock&theme=latte` forces a
+ * `switch`, `more`, `newtab`, `newworkspace`, `add-host`. `diff` is a screen, not a
+ * drawer: it sets the hash below. `?mock&theme=latte` forces a
  * theme (read in app.tsx) and `?mock&still` stops the fixture ticking.
  * ponytail: no allow-list of names; the screens that read it already know theirs.
  */
@@ -681,6 +899,8 @@ export function installMock(): void {
   if (!location.search.includes('mock') && meta('VITE_MOCK') !== '1') return;
   installed = true;
   if (meta('DEV') !== false) assertMockInvariants();
+  // `?mock&open=diff` opens the Diff screen on the Workspace whose diff is cut short.
+  if (mockOpen() === 'diff' && !location.hash) location.hash = `#/diff/${encodeURIComponent('mbp/herdr/digivaley')}`;
 
   const s: Store = {
     state: structuredClone(mockState),

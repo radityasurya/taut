@@ -82,6 +82,14 @@ export type RenameBody = { muxKey: string; label: string } & ({ workspaceId: str
 /** POST /api/panes/:key/close → 204. Errors on all four: `{ error: string }` — 400 body, 403 origin, 404 unknown, 501 'unsupported', 502 herdr error code. */
 /** POST /api/panes/:key/attach */
 export interface AttachResult { path: string; bytes: number; display: string }
+export type DiffScope = 'working' | 'staged' | 'base';
+export interface DiffLine { type: 'ctx' | 'add' | 'del' | 'meta'; text: string; oldNo?: number; newNo?: number }
+export interface DiffHunk { header: string; lines: DiffLine[] }
+export interface DiffFile {
+  path: string; oldPath?: string; additions: number; deletions: number; binary?: boolean;
+  hunks: DiffHunk[];
+}
+export interface DiffResult { scope: DiffScope; base?: string; files: DiffFile[]; truncated: boolean }
 /** POST /api/push/subscribe */
 export interface PushSubscriptionBody {
   endpoint: string; expirationTime?: number | null;

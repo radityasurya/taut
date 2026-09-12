@@ -1,5 +1,6 @@
 import { isAbsolute, resolve, sep } from 'node:path';
-import type { HostConfig, InputBody, NewTabBody, NewWorkspaceBody, ProbeBody, PushSubscriptionBody, RenameBody, ScreenMode, SeenBody, SettingsBody, SuggestSettingBody } from '../shared/types.ts';
+import type { DiffResult, DiffScope, HostConfig, InputBody, NewTabBody, NewWorkspaceBody, ProbeBody, PushSubscriptionBody, RenameBody, ScreenMode, SeenBody, SettingsBody, SuggestSettingBody } from '../shared/types.ts';
+import { parseUnifiedDiff } from '../shared/diff.ts';
 import { HerdrMux } from './herdr.ts';
 import { discoverLocalMuxes, discoverRemote, hostId, startRemoteHost, syncHosts, validTarget, validateHosts, writeHostsConfig } from './hosts.ts';
 import type { Hub } from './mux.ts';
@@ -11,6 +12,33 @@ const plainObject = (value: unknown): value is Record<string, unknown> => typeof
 const validLabel = (value: unknown, required = false) => value === undefined ? !required : typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 80;
 const validCwd = (value: unknown) => value === undefined || typeof value === 'string' && isAbsolute(value);
 const nonEmpty = (value: unknown) => typeof value === 'string' && value.trim().length > 0;
+const quoteShell = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+type GitResult = { stdout: string; stderr: string; code: number };
+
+async function runGit(cwd: string, args: string[], target?: string): Promise<GitResult> {
+  const command = target
+    ? ['ssh', '-o', 'BatchMode=yes', target, '--', `cd ${quoteShell(cwd)} && git ${args.map(quoteShell).join(' ')}`]
+    : ['git', ...args];
+  const child = Bun.spawn(command, { ...(target ? {} : { cwd }), stdout: 'pipe', stderr: 'pipe' });
+  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+  return { stdout, stderr, code };
+}
+
+async function resolveDiffBase(cwd: string, target?: string): Promise<string | undefined> {
+  for (const args of [
+    ['config', 'review.base'], ['rev-parse', '--abbrev-ref', '@{upstream}'],
+    ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'],
+  ]) {
+    const result = await runGit(cwd, args, target);
+    if (!result.code && result.stdout.trim()) return result.stdout.trim();
+    if (/not a git repository/i.test(result.stderr)) throw new Error('not-a-repo');
+  }
+  for (const name of ['main', 'master', 'trunk']) {
+    const result = await runGit(cwd, ['rev-parse', '--verify', '--quiet', name], target);
+    if (!result.code) return name;
+    if (/not a git repository/i.test(result.stderr)) throw new Error('not-a-repo');
+  }
+}
 
 export function startHttp(hub: Hub, opts: {
   port: number; hostname: string; staticDir: string;
@@ -35,6 +63,42 @@ export function startHttp(hub: Hub, opts: {
       }
       try {
         if (req.method === 'GET' && url.pathname === '/api/state') return json(await hub.state());
+        const workspaceDiff = url.pathname.match(/^\/api\/workspaces\/([^/]+)\/diff$/);
+        if (req.method === 'GET' && workspaceDiff) {
+          let key: string;
+          try { key = decodeURIComponent(workspaceDiff[1]!); } catch { return json({ error: 'unknown-workspace' }, 404); }
+          const scope = url.searchParams.get('scope');
+          if (!['working', 'staged', 'base'].includes(scope ?? '')) return json({ error: 'scope' }, 400);
+          const state = await hub.state(); const workspace = state.workspaces.find(item => item.key === key);
+          if (!workspace) return json({ error: 'unknown-workspace' }, 404);
+          if (!workspace.cwd) return json({ error: 'not-a-repo' }, 409);
+          const host = state.hosts.find(item => item.id === workspace.muxKey.split('/')[0]);
+          const diffScope = scope as DiffScope; let base: string | undefined;
+          if (diffScope === 'base') {
+            try { base = await resolveDiffBase(workspace.cwd, host?.target); }
+            catch (error) { if (errorMessage(error) === 'not-a-repo') return json({ error: 'not-a-repo' }, 409); throw error; }
+            if (!base) return json({ error: 'no-base' }, 502);
+          }
+          const args = ['diff', '--no-color', '-U3'];
+          if (diffScope === 'staged') args.push('--staged');
+          if (base) args.push(`${base}...HEAD`);
+          const requestedFile = url.searchParams.get('file'); if (requestedFile !== null) args.push('--', requestedFile);
+          const result = await runGit(workspace.cwd, args, host?.target);
+          if (result.code) {
+            if (/not a git repository/i.test(result.stderr)) return json({ error: 'not-a-repo' }, 409);
+            return json({ error: result.stderr.split(/\r?\n/).find(Boolean) ?? `git exited ${result.code}` }, 502);
+          }
+          let raw = result.stdout, truncated = false;
+          if (requestedFile === null && Buffer.byteLength(raw) > 64 * 1024) {
+            truncated = true; raw = ''; let bytes = 0;
+            for (const chunk of result.stdout.split(/(?=diff --git )/).filter(Boolean)) {
+              const size = Buffer.byteLength(chunk); if (bytes + size > 64 * 1024) break;
+              raw += chunk; bytes += size;
+            }
+          }
+          const payload: DiffResult = { scope: diffScope, ...(base ? { base } : {}), files: parseUnifiedDiff(raw), truncated };
+          return json(payload);
+        }
         const muxWrite = url.pathname.match(/^\/api\/muxes\/([^/]+)\/(tabs|workspaces)$/);
         if (req.method === 'POST' && muxWrite) {
           let key: string;

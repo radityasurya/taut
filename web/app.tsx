@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { AnchorHTMLAttributes } from 'react';
 import type { ScreenEvent, State } from '../shared/types.ts';
+import { Diff } from './diff.tsx';
 import { Home, seedSeen, unseen } from './home.tsx';
 import { Hosts } from './hosts.tsx';
 import { AgentsTab, HostsTab, SettingsTab } from './icons.tsx';
@@ -229,6 +230,7 @@ function TabBar({ route, badge }: { route: string; badge: number }) {
 export function App() {
   const route = useRoute();
   const paneKey = route.startsWith('/pane/') ? decodeURIComponent(route.slice('/pane/'.length)) : undefined;
+  const diffKey = route.startsWith('/diff/') ? decodeURIComponent(route.slice('/diff/'.length)) : undefined;
   const { state, screen, connected } = useEvents(paneKey);
   const needsYou = state?.panes.filter((p) => p.status === 'blocked' && unseen(p)).length ?? 0;
 
@@ -248,6 +250,8 @@ export function App() {
       )}
       {paneKey ? (
         <PaneScreen paneKey={paneKey} state={state} screen={screen} />
+      ) : diffKey ? (
+        <Diff workspaceKey={diffKey} state={state} />
       ) : route === '/hosts' ? (
         <Hosts state={state} />
       ) : route === '/settings' ? (
@@ -255,7 +259,7 @@ export function App() {
       ) : (
         <Home state={state} />
       )}
-      {!paneKey && <TabBar route={route} badge={needsYou} />}
+      {!paneKey && !diffKey && <TabBar route={route} badge={needsYou} />}
     </>
   );
 }

@@ -108,6 +108,26 @@ nothing new.
 - **Nothing comes back.** The Hub never serves an attachment, lists the directory, or
   deletes a finished file. Clean the directory yourself when you want the space back.
 
+## Diff review
+
+`GET /api/workspaces/:key/diff` runs `git diff` in that Workspace's cwd. The
+command runs with the Hub user's permissions: directly on the Hub's machine, or
+over the Host's non-interactive SSH connection for a remote Workspace. The agent
+in that Workspace already runs as the same user, so the diff shows nothing the
+agent could not print into its own Pane.
+
+- **The Hub never writes.** Only `diff`, `config`, `rev-parse` and
+  `symbolic-ref` run. taut never stages, commits, checks out or resets.
+- **The scope is a fixed list.** `working`, `staged` and `base` are the only
+  accepted values; anything else is a 400. A `file=` value is passed after
+  `--`, so a path cannot become a git option.
+- **The cwd comes from the Mux, never from the request.** The key selects a
+  Workspace the Hub already knows; the request cannot name a directory.
+- **Diff content is served only to the Hub's clients**, over the same boundary
+  as a Screen: loopback bind, Tailscale in front, the Origin check on writes,
+  and the trusted login when it is set. A diff is source code, so treat it like
+  the terminal output beside it.
+
 ## Remote Hosts and trusted login
 
 When `trustedUser` is configured, the Hub requires every request—including static files and

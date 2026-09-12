@@ -194,17 +194,22 @@ screenshots of all four flows against a throwaway Hub on 7715.
 
 ## Phase 8 — diff review
 
-- [ ] Hub runs `git diff --no-color -U3` (working tree, `--staged`, and base…HEAD with the
+- [x] Hub runs `git diff --no-color -U3` (working tree, `--staged`, and base…HEAD with the
       base resolved like herdr-hunk-diff: upstream → `origin/HEAD` → main/master) in the
       Workspace cwd, local or over SSH; `GET /api/workspaces/:key/diff?scope=`
-- [ ] PWA renders it with `gitdiff-parser` + `react-diff-view` (MIT), unified view on the
-      phone, per-file collapse, hunk headers; opened from the Pane's ⋯ menu and the Workspace
-      long-press menu
-- [ ] hunk itself is a TUI with no web or JSON mode, so it is not embedded; a hunk pane still
+- [x] the Hub parses the unified diff with a hand-written `shared/diff.ts`, and the PWA
+      renders it itself in `web/diff.tsx`: unified view, per-file collapse, hunk headers,
+      Wrap, and a scope control. No `gitdiff-parser` and no `react-diff-view`; see
+      DECISIONS.md. Opened from the Pane's ⋯ menu and the Workspace long-press menu
+- [x] hunk itself is a TUI with no web or JSON mode, so it is not embedded; a hunk pane still
       opens like any other Pane
 
 Verify: after an agent edits files, open Diff from the Pane; hunks render with syntax-free
 coloring; staged and unstaged scopes switch.
+Evidence: `shared/diff.ts` (parser), `GET /api/workspaces/:key/diff?scope=working|staged|base`
+in `server/http.ts`, `web/diff.tsx` at `#/diff/<workspaceKey>`, fixtures and the fake route in
+`web/mock.ts` (`?mock&open=diff`). `bun test` 80 pass, 0 fail, `test/diff.test.ts` 7 of them.
+Phone and desktop screenshots against a throwaway Hub on 7718 with a throwaway herdr.
 
 ## Phase 9 — ship
 

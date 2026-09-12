@@ -14,7 +14,8 @@ in [design/](./design/).
 
 Screenshot helpers, all under `?mock`: `&still` freezes the ticker, `&theme=`
 forces a theme, `&open=switch|more|newtab|newworkspace|add-host` opens a
-sheet.
+sheet. `&open=diff` is the one that opens a screen instead: it sets the hash to
+the Workspace whose fixture diff is cut short.
 
 ## Tokens
 
@@ -194,6 +195,52 @@ So `image/*,video/*` stays. A photo that reached the phone through Files,
 AirDrop or Dropbox skips that path and can still arrive as HEIC; the Hub stores
 it unchanged. Unverified here: no real iPhone was in this session, and the
 camera's **Formats** setting (High Efficiency or Most Compatible) was not tried.
+
+## Diff (`#/diff/<workspaceKey>`) — `web/diff.tsx`
+
+Open it from the Pane's ⋯ menu or from a long press on a Workspace heading on
+the Agents screen. Both pass the Workspace key, so the screen always knows
+which directory git runs in. The back chevron returns to where you came from
+(`history.back()`), which is the Pane in one case and the list in the other.
+
+Top bar: back, the Workspace label, a line with the file count and `+N −M`,
+then the **wrap** chip and **Refresh**. Under it, three scope chips —
+**Changes · Staged · vs base**. In `vs base` a muted line under the chips names
+the branch the Hub resolved, for example `vs main`. Wrap and the scope live in
+the component, not in `localStorage`: a diff is a visit, not a setting.
+
+One section per file. The path row is `<dir>/<name>`, with the directory
+truncating and the file name never; a rename reads `oldPath → path`. The counts
+are `+N` in `--ok` and `−M` in `--danger`. A chevron collapses the file. The
+first three files open, the rest start collapsed, which is about one phone
+screen of context.
+
+A hunk renders as rows, not as text: two narrow tabular line-number columns
+(old, new) in `--muted`, a one-character marker column (`+`, `-`, space), then
+the line in mono 12 px. Added rows carry `--ok` at 12 %, removed rows
+`--danger` at 12 % (`diff-add` and `diff-del` in `web/theme.css`, one
+`color-mix` pair for all seven themes). The hunk header sits on `--surface` in
+`--muted`; a `\ No newline at end of file` line is muted italic. There is **no
+syntax highlighting**: the colour in this screen means added or removed, and
+nothing else.
+
+Wrap is off by default, so each file scrolls horizontally inside its own
+section with the same right-edge fade as the Pane grid (`FADE`, exported from
+`web/pane.tsx`). Wrap on reflows the line to the column and keeps the gutters.
+
+| State | What it shows |
+|---|---|
+| Loading | three skeleton blocks, one per file |
+| Empty | `No unstaged changes`, `No staged changes`, or `No changes vs main` — the scope says which |
+| Binary | `Binary file` in place of the hunks |
+| Cut | `Large diff · the list is cut. Load a file in full below.` plus **Show whole file** under every listed file |
+| Not a repository | `Not a git repository` and the Workspace cwd |
+| Gone | `Workspace is gone` and a link back |
+| No base | `No base branch to compare with` |
+
+**Show whole file** refetches that one file with `?file=<path>`, which the Hub
+answers uncapped, and replaces the file's hunks in place. The rest of the list
+stays as it is. A failure turns the button into **Try again**.
 
 ## Hosts (`#/hosts`) — `web/hosts.tsx`
 

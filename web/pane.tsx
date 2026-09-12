@@ -57,8 +57,8 @@ const lastPane = new Map<string, string>();
 
 const plain = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, '');
 
-/** "Wider than the viewport" is a fade, not a scrollbar. */
-const FADE = 'linear-gradient(to right,#000 calc(100% - 24px),transparent)';
+/** "Wider than the viewport" is a fade, not a scrollbar. The Diff screen reuses it. */
+export const FADE = 'linear-gradient(to right,#000 calc(100% - 24px),transparent)';
 
 /** The last block the agent printed, for read-aloud. */
 function lastBlock(text?: string): string {
@@ -818,6 +818,7 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
         onClose={() => setShowMore(false)}
         items={[
           { label: wrap ? 'Wrap: on' : 'Wrap: off', onClick: () => setWrap(!wrap) },
+          ...(ws ? [{ label: 'Diff', onClick: () => navigate(`#/diff/${encodeURIComponent(ws.key)}`) }] : []),
           ...(writable
             ? [
                 { label: 'Rename', onClick: () => setRename(true) },
