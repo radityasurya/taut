@@ -232,24 +232,45 @@ generated notes), README "Install" with the three paths and the Unraid template,
 Design: [ADR 0003](./adr/0003-interactivity-from-recognised-text-and-mouse-forwarding.md);
 terms Affordance, Hint, App profile, Mouse forwarding in [../CONTEXT.md](../CONTEXT.md).
 
-- [ ] App profiles (`web/profiles.ts`): by command name; mouse on/off, hint patterns, static
+- [~] App profiles (`web/profiles.ts`): by command name; mouse on/off, hint patterns, static
       keys and quick replies (the per-agent sets move here); generic fallback
-- [ ] Hints → Affordances: four generic patterns; in place on the grid with a 44 px hit area,
+      — `web/profiles.ts` (`PROFILES`, `profileFor`, `mouseAllowed`), read by `web/pane.tsx`
+      for the key bar, the pills and the switch; `StatePane.command` fills from
+      `HerdrMux.foregroundCommand` and tmux's `pane_current_command`
+- [~] Hints → Affordances: four generic patterns; in place on the grid with a 44 px hit area,
       and as pills in the dock ahead of the quick replies
-- [ ] Option lists with a `❯` cursor: tap a line to move the cursor there (arrow keys relative
+      — `shared/affordances.ts`, `web/affordances.tsx` (`AffordanceLayer`, `hintPills`),
+      `test/affordances.test.ts` "recognises k9s and htop Hint runs"
+- [x] Option lists with a `❯` cursor: tap a line to move the cursor there (arrow keys relative
       to the current row); long-press moves and confirms with Enter
-- [ ] Mouse forwarding through `pane.send_input`: SGR press + release on tap, right click on
+      — the layer sends and confirms (`AffordanceLayer` `onHold`); the option regex strips a
+      leading and trailing frame char, so a framed permission box matches too
+      (`test/affordances.test.ts` "maps option rows inside a framed permission box")
+- [~] Mouse forwarding through `pane.send_input`: SGR press + release on tap, right click on
       long-press, wheel on vertical drag, double click on double tap; only for profiles with
       mouse on or the per-Pane switch; off while Wrap is on; Fit scale compensated
-- [ ] Claude Code status items: `N shells` / `N agents` → `/tasks` + Enter; `auto mode on` →
+      — `web/affordances.tsx` (`useMouseForward`, `useCell`), `server/mux.ts` (`mouseBytes`),
+      `test/mouse.test.ts`; a drag over the grid posted four `wheelDown` reports for five rows
+- [~] Claude Code status items: `N shells` / `N agents` → `/tasks` + Enter; `auto mode on` →
       Shift+Tab; footer badges → Footer navigation keys
-- [ ] URLs and paths: tap to copy, long-press to open (URLs)
-- [ ] Contract test on a throwaway herdr: htop selection moves on a forwarded tap; an unknown
+      — `PROFILES.claude.statusItems`, `test/affordances.test.ts` "recognises Claude status,
+      generic key Hints, and URLs"; the fixture footer is in `web/mock.ts` (`CLAUDE_VISIBLE`)
+- [~] URLs and paths: tap to copy, long-press to open (URLs)
+      — copy and the 1.5 s `Copied` chip are in `web/affordances.tsx`; long-press to open is
+      not built, because a Pane path belongs to the Host, not to this phone
+- [x] Contract test on a throwaway herdr: htop selection moves on a forwarded tap; an unknown
       program never receives mouse bytes
+      — `test/mux.contract.test.ts` "forwarded htop click moves its highlighted process row"
+      and "mouse-off rejects before a plain shell receives bytes"; the same file's key-name
+      contract resolves `f1`, `f5`, `f10`, `shift+f`, `ctrl+d` and `shift+tab`
 
 Verify: on the phone, tap a k9s row and it selects; tap `<d>` in its header and the describe
 view opens; tap option 2 in a Claude Code permission prompt and the cursor moves; tap
 `1 shell` and the tasks panel opens.
+
+Verified in an emulated phone (390×844, touch): a tap on a real htop through a throwaway Hub
+moved the highlighted row, read back from `GET /api/panes/:key/screen`; the k9s and Claude
+Code fixtures underline their Hints and list them as dock pills.
 
 ## Later (explicitly out of v1)
 

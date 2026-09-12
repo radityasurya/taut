@@ -8,6 +8,7 @@ export interface Tab { id: string; workspaceId: string; label: string }
 export interface Pane {
   id: string; tabId: string; workspaceId: string; title: string; cwd?: string;
   agent?: string; status: Status; revision: number; cols?: number; rows?: number;
+  /** foreground command name (tmux: pane_current_command; herdr: last foreground process), used to pick the App profile */ command?: string;
 }
 export interface Tree { workspaces: Workspace[]; tabs: Tab[]; panes: Pane[] }
 
@@ -26,6 +27,8 @@ export interface Mux {
   read(paneId: string, mode: ScreenMode): Promise<Screen>;
   sendText(paneId: string, text: string): Promise<void>;
   sendKeys(paneId: string, keys: string[]): Promise<void>; // herdr key names are canonical
+  /** write bytes to the pty untouched (escape sequences included) */
+  sendRaw(paneId: string, raw: string): Promise<void>;
   onChange(cb: (paneIds: string[] | 'all') => void): () => void;
   // herdr only; tmux throws Error('unsupported'). ponytail: no capability flags, add at a third backend.
   newTab(workspaceId: string, o: { cwd?: string; label?: string; agent?: string }): Promise<Pane>;
@@ -54,6 +57,7 @@ export interface StatePane {
   key: string; muxKey: string; workspaceId: string; tabId: string; id: string; title: string;
   cwd?: string; agent?: string; status: Status; revision: number; seenRevision: number;
   cols?: number; rows?: number;
+  /** foreground command name (tmux: pane_current_command; herdr: last foreground process), used to pick the App profile */ command?: string;
   /** last non-empty line of the visible Screen; agent Panes only, cached per revision by the Hub */
   lastLine?: string;
   /** ms epoch of the last Status change the Hub observed; first sight counts as a change */
@@ -65,8 +69,14 @@ export interface StatePane {
 export interface State { hosts: StateHost[]; muxes: StateMux[]; workspaces: StateWorkspace[]; tabs: StateTab[]; panes: StatePane[] }
 /** GET /api/panes/:key/screen?mode= and SSE `event: screen` */
 export interface ScreenEvent extends Screen { key: string }
-/** POST /api/panes/:key/input — text is sent first, then keys */
-export interface InputBody { text?: string; keys?: string[] }
+/** POST /api/panes/:key/input — text is sent first, then keys, then raw (bytes written to the pty untouched) */
+export interface InputBody { text?: string; keys?: string[]; raw?: string }
+/** POST /api/panes/:key/mouse — the Hub builds the SGR bytes; `allow` must be true (profile or per-Pane switch) or the Hub answers 409 */
+export interface MouseBody { kind: 'click' | 'right' | 'double' | 'wheelUp' | 'wheelDown'; col: number; row: number; allow: boolean }
+/** what tapping an Affordance does: keys → send_keys names; text → sendText; command → text + enter; copy → clipboard */
+export type Action = { keys: string[] } | { text: string } | { command: string } | { copy: string };
+/** a tappable token on the grid, 0-based row/col, colEnd exclusive */
+export interface Affordance { row: number; colStart: number; colEnd: number; label: string; action: Action }
 /** POST /api/panes/:key/seen */
 export interface SeenBody { revision: number }
 // Phase 7 write routes. Keys: muxKey = `${hostId}/${muxId}`; paneKey = `${muxKey}/${paneId}`;

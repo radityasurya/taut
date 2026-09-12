@@ -24,7 +24,7 @@ describe('write routes', () => {
     const mux: Mux = {
       kind: 'herdr', id: 'fake', tree: async () => structuredClone(tree),
       read: async (_id, mode): Promise<Screen> => ({ text: '', ansi: false, revision: 0, mode }),
-      sendText: async () => {}, sendKeys: async () => {}, onChange: () => () => {}, explain: async (): Promise<Explain | null> => null,
+      sendText: async () => {}, sendKeys: async () => {}, sendRaw: async () => {}, onChange: () => () => {}, explain: async (): Promise<Explain | null> => null,
       newTab: async (workspaceId, body): Promise<Pane> => { fail(); const pane = { id: 'p2', tabId: 't2', workspaceId, title: body.label!, cwd: body.cwd, status: 'unknown' as const, revision: 0 }; tree.tabs.push({ id: 't2', workspaceId, label: body.label! }); tree.panes.push(pane); return pane; },
       newWorkspace: async (body): Promise<Workspace> => { fail(); const workspace = { id: 'w2', label: body.label!, cwd: body.cwd }; tree.workspaces.push(workspace); return workspace; },
       rename: async (target, label) => { fail(); if ('workspaceId' in target) tree.workspaces.find(x => x.id === target.workspaceId)!.label = label; else if ('tabId' in target) tree.tabs.find(x => x.id === target.tabId)!.label = label; else tree.panes.find(x => x.id === target.paneId)!.title = label; },

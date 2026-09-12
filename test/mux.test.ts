@@ -19,7 +19,7 @@ test('Hub adds tabs, status timestamps, and cached agent last lines', async () =
   const mux: Mux = {
     kind: 'herdr', id: 'fake', tree: async () => tree,
     read: async (_paneId: string, mode: ScreenMode): Promise<Screen> => { reads++; return { text: 'first\n\x1b[31m last line \x1b[0m\n\n', ansi: true, revision: 1, mode }; },
-    sendText: async () => {}, sendKeys: async () => {}, onChange: () => () => {},
+    sendText: async () => {}, sendKeys: async () => {}, sendRaw: async () => {}, onChange: () => () => {},
     newTab: async (): Promise<Pane> => tree.panes[0]!, newWorkspace: async (): Promise<Workspace> => tree.workspaces[0]!,
     rename: async () => {}, closePane: async () => {}, explain: async (): Promise<Explain | null> => null, close: () => {},
   };

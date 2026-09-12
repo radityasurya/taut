@@ -2,6 +2,9 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AGENT_KEYS, SHELL_KEYS } from '../web/keys.ts';
+import { parseAnsi } from '../shared/ansi.ts';
+import { startHttp } from '../server/http.ts';
+import { Hub } from '../server/mux.ts';
 import { herdrAvailable, herdrMux, startThrowawayHerdr } from './harness.ts';
 
 const eventually = async <T>(read: () => Promise<T>, accepts: (value: T) => boolean, timeout: number) => {
@@ -36,6 +39,73 @@ describe.skipIf(!herdrAvailable)('HerdrMux contract', () => {
     await mux.sendKeys(paneId, ['enter']);
     const screen = await eventually(() => mux.read(paneId, 'visible'), value => value.text.includes('tautan-ok'), 5_000);
     expect(screen.text).toContain('tautan-ok');
+  });
+
+  test('sendRaw reaches the visible screen', async () => {
+    await mux.sendRaw(paneId, 'echo raw-ok\n');
+    const screen = await eventually(() => mux.read(paneId, 'visible'), value => value.text.includes('raw-ok'), 5_000);
+    expect(screen.text).toContain('raw-ok');
+  });
+
+  test('records extended Herdr key-name acceptance', async () => {
+    const pane = await mux.newTab(workspaceId, { cwd: fixture.dir, label: 'extended-keys' });
+    const results = new Map<string, 'resolved' | 'rejected'>();
+    for (const name of ['f1', 'f5', 'f10', 'shift+f', 'ctrl+d', 'shift+tab']) {
+      try { await mux.sendKeys(pane.id, [name]); results.set(name, 'resolved'); }
+      catch { results.set(name, 'rejected'); }
+    }
+    console.log('Herdr key-name contract', Object.fromEntries(results));
+    expect([...results.values()].every(value => value === 'resolved' || value === 'rejected')).toBe(true);
+    try { await mux.closePane(pane.id); } catch {}
+  });
+
+  test('forwarded htop click moves its highlighted process row', async () => {
+    if (!Bun.which('htop')) return;
+    const pane = await mux.newTab(workspaceId, { cwd: fixture.dir, label: 'htop-mouse' });
+    // htop paints its column-header row (`PID USER ...`) with a partial, mixed-colour
+    // background for the sorted column, and the selected process row with a single,
+    // uniform background colour across the whole line. Skip the header explicitly and
+    // require a uniform bg colour so meter/tab bars (row 8, mixed green/blue) and the
+    // header (mixed green/cyan) don't win over the real selection (solid cyan).
+    const highlightedRow = (text: string) => parseAnsi(text).findIndex((line, row) => {
+      if (row <= 1) return false;
+      const rowText = line.map(span => span.text).join('');
+      if (rowText.includes('PID') && rowText.includes('USER')) return false;
+      const withBg = line.filter(span => span.bg !== undefined && span.text.trim() !== '');
+      return withBg.length > 0 && withBg.every(span => span.bg === withBg[0]!.bg);
+    });
+    // Hub.close() closes every Mux it was given, so it must not be handed the shared
+    // `mux` fixture: that would kill the shared event stream for every later test.
+    const hubMux = herdrMux(fixture.sock);
+    const hub = new Hub({ refreshMs: 0, suggest: null }); hub.add('contract', hubMux);
+    const server = startHttp(hub, { port: 0, hostname: '127.0.0.1', staticDir: fixture.dir });
+    try {
+      await mux.sendText(pane.id, 'htop\n');
+      const ready = await eventually(() => mux.read(pane.id, 'visible'), value => value.text.includes('F10Quit') && highlightedRow(value.text) >= 0, 5_000);
+      const current = highlightedRow(ready.text); const target = current + 3;
+      const origin = `http://127.0.0.1:${server.port}`;
+      const key = `contract/throwaway/${pane.id}`;
+      const response = await fetch(`${origin}/api/panes/${encodeURIComponent(key)}/mouse`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'click', col: 5, row: target + 1, allow: true }) });
+      expect(response.status).toBe(204);
+      const moved = await eventually(() => mux.read(pane.id, 'visible'), value => highlightedRow(value.text) === target, 5_000);
+      expect(highlightedRow(moved.text)).toBe(target);
+      await mux.sendText(pane.id, 'q');
+    } finally { server.stop(); hub.close(); try { await mux.closePane(pane.id); } catch {} }
+  }, 15_000);
+
+  test('mouse-off rejects before a plain shell receives bytes', async () => {
+    const pane = await mux.newTab(workspaceId, { cwd: fixture.dir, label: 'mouse-off' });
+    // See the note in the htop-click test above: never hand the shared `mux` to a Hub.
+    const hubMux = herdrMux(fixture.sock);
+    const hub = new Hub({ refreshMs: 0, suggest: null }); hub.add('contract', hubMux);
+    const server = startHttp(hub, { port: 0, hostname: '127.0.0.1', staticDir: fixture.dir });
+    try {
+      const before = (await mux.read(pane.id, 'visible')).text;
+      const origin = `http://127.0.0.1:${server.port}`; const key = `contract/throwaway/${pane.id}`;
+      const response = await fetch(`${origin}/api/panes/${encodeURIComponent(key)}/mouse`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'click', col: 5, row: 5, allow: false }) });
+      expect(response.status).toBe(409);
+      expect((await mux.read(pane.id, 'visible')).text).toBe(before);
+    } finally { server.stop(); hub.close(); try { await mux.closePane(pane.id); } catch {} }
   });
 
   test('onChange fires after a send', async () => {

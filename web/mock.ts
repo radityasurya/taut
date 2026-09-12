@@ -3,7 +3,7 @@
 // opened with `?mock` (or built with VITE_MOCK=1).
 import type {
   DiffFile, DiffHunk, DiffLine, DiffResult, DiffScope,
-  Explain, InputBody, NewTabBody, NewWorkspaceBody, ProbeBody, ProbeResult, RenameBody, Screen, ScreenEvent,
+  Explain, InputBody, MouseBody, NewTabBody, NewWorkspaceBody, ProbeBody, ProbeResult, RenameBody, Screen, ScreenEvent,
   ScreenMode, SeenBody, Settings, SettingsBody, State, StatePane, Status, SuggestSettingBody,
 } from '../shared/types.ts';
 
@@ -51,10 +51,14 @@ const CLAUDE_VISIBLE = [
   `  ${DIM}dim${RESET} together, so a run styled dim-only keeps its weight when`,
   '  the parser merges the next span. I will run the suite to confirm.',
   '',
+  `  ${DIM}docs:${RESET} ${BLUE}https://github.com/radityasurya/tautan/blob/main/docs/UI.md${RESET}`,
+  '',
   `${BLUE}●${RESET} ${BOLD}Bash${RESET} ${DIM}pnpm test --filter ansi${RESET}`,
   '',
   ...PERMISSION_BOX,
   HINT_LINE,
+  // Claude Code's own status footer: two Affordances, `shift+tab` and `/tasks`.
+  `${DIM}⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent${RESET}`,
 ].join('\r\n');
 
 /** The same Pane in `recent` mode: reflowed, no styling. */
@@ -105,6 +109,23 @@ const HTOP = [
   `${DIM}F1${RESET}Help  ${DIM}F2${RESET}Setup ${DIM}F3${RESET}Search${DIM}F4${RESET}Filter${DIM}F5${RESET}Tree  ${DIM}F6${RESET}SortBy${DIM}F7${RESET}Nice -${DIM}F8${RESET}Nice +${DIM}F9${RESET}Kill  ${DIM}F10${RESET}Quit${' '.repeat(38)}`,
 ].join('\r\n');
 
+/** k9s: the App profile with mouse forwarding on, and a header full of `<key> Label` Hints. */
+const K9S = [
+  ` ${CYAN}Context:${RESET} kind-tautan      ${DIM}<0>${RESET} all      ${DIM}<1>${RESET} default   ${DIM}<d>${RESET} describe  ${DIM}<ctrl-d>${RESET} delete`,
+  ` ${CYAN}Cluster:${RESET} kind-tautan      ${DIM}<e>${RESET} edit     ${DIM}<l>${RESET} logs      ${DIM}<s>${RESET} shell     ${DIM}<?>${RESET} help`,
+  ` ${CYAN}Namespace:${RESET} default`,
+  '',
+  `${HEAD}${wide('  NAME                             READY   STATUS      RESTARTS   AGE')}${RESET}`,
+  `${SEL}${wide('  api-7c9f6b8d4-2kq9x              1/1     Running     0          4d2h')}${RESET}`,
+  wide('  web-5f4d8c7b9-mn4pz              1/1     Running     1          4d2h'),
+  wide('  worker-6b8c5d7f4-xj28t           1/1     Running     0          19h'),
+  wide('  postgres-0                       1/1     Running     0          11d'),
+  wide('  redis-59c7d8b4f-qq4kl            1/1     Running     3          11d'),
+  wide('  migrate-28471204-hb9rd           0/1     Completed   0          42m'),
+  '',
+  `${DIM}<pods>${RESET}${' '.repeat(100)}`,
+].join('\r\n');
+
 /** ms epoch `m` minutes ago, for `statusChangedAt`. */
 const ago = (m: number) => Date.now() - m * 60_000;
 
@@ -145,6 +166,7 @@ export const mockState: State = {
     { key: 'mbp/herdr/t5', muxKey: 'mbp/herdr', workspaceId: 'digivaley', id: 't5', label: 'shell' },
     { key: 'mbp/tmux/0', muxKey: 'mbp/tmux', workspaceId: 'admin', id: '0', label: 'htop' },
     { key: 'mbp/tmux/1', muxKey: 'mbp/tmux', workspaceId: 'admin', id: '1', label: 'logs' },
+    { key: 'mbp/tmux/2', muxKey: 'mbp/tmux', workspaceId: 'admin', id: '2', label: 'k9s' },
     { key: 'unraid/tmux/0', muxKey: 'unraid/tmux', workspaceId: 'main', id: '0', label: 'shell' },
     { key: 'unraid/tmux/1', muxKey: 'unraid/tmux', workspaceId: 'main', id: '1', label: 'rsync' },
   ],
@@ -192,8 +214,14 @@ export const mockState: State = {
     },
     {
       key: 'mbp/tmux/p0', muxKey: 'mbp/tmux', workspaceId: 'admin', tabId: '0', id: 'p0',
-      title: 'htop', cwd: '~',
+      title: 'htop', cwd: '~', command: 'htop',
       status: 'unknown', revision: 3, seenRevision: 0, cols: 120, rows: 30, statusChangedAt: ago(178),
+    },
+    // The App profile with mouse forwarding on: taps go to k9s, Hints go to the dock.
+    {
+      key: 'mbp/tmux/p2', muxKey: 'mbp/tmux', workspaceId: 'admin', tabId: '2', id: 'p2',
+      title: 'k9s', cwd: '~', command: 'k9s',
+      status: 'unknown', revision: 21, seenRevision: 21, cols: 120, rows: 30, statusChangedAt: ago(31),
     },
     {
       key: 'mbp/tmux/p1', muxKey: 'mbp/tmux', workspaceId: 'admin', tabId: '1', id: 'p1',
@@ -269,7 +297,9 @@ export const mockScreens: Record<string, Record<ScreenMode, Screen>> = Object.fr
       ? pair(p.revision, CLAUDE_VISIBLE, CLAUDE_RECENT)
       : p.key === 'mbp/tmux/p0'
         ? pair(p.revision, HTOP, strip(HTOP))
-        : pair(p.revision, genericScreen(p), strip(genericScreen(p))),
+        : p.key === 'mbp/tmux/p2'
+          ? pair(p.revision, K9S, strip(K9S))
+          : pair(p.revision, genericScreen(p), strip(genericScreen(p))),
   ]),
 );
 
@@ -483,6 +513,16 @@ export function assertMockInvariants(): void {
     mockState.panes.some((p) => p.cols === 120 && mockScreens[p.key]?.visible.text.split('\r\n').some(
       (l) => strip(l).length >= 120)) || 'a 120-column grid',
     mockState.panes.every((p) => mockScreens[p.key]) || 'a Screen per Pane',
+    // Phase 10: one Pane per App profile that forwards the mouse, and one Screen carrying
+    // each kind of Affordance the generic patterns look for.
+    mockState.panes.some((p) => p.command === 'htop') || 'a Pane running htop',
+    mockState.panes.some((p) => p.command === 'k9s') || 'a Pane running k9s',
+    /<ctrl-d>\s+delete/.test(strip(K9S)) || 'a k9s Hint header',
+    /https?:\/\//.test(strip(CLAUDE_VISIBLE)) || 'a URL on a Screen',
+    strip(CLAUDE_VISIBLE).includes('auto mode on') || 'a Claude Code status footer',
+    strip(CLAUDE_VISIBLE).includes('esc to cancel') || 'an `esc to cancel` Hint',
+    strip(CLAUDE_VISIBLE).replace(/[│┃]/g, ' ').split('\r\n')
+      .filter((l) => /^\s*[❯>]?\s*[1-9]\.\s+\S/.test(l)).length >= 2 || 'an option list',
     mockState.panes.every((p) => mockState.tabs.some((t) => t.muxKey === p.muxKey && t.id === p.tabId)) || 'a Tab per Pane',
     Object.values(MOCK_DIFFS).some((d) => d.working?.truncated) || 'a cut diff',
     Object.values(MOCK_DIFFS).some((d) => d.staged?.files.length === 0) || 'an empty diff scope',
@@ -829,7 +869,7 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
   const wrote = write(s, url, method, body);
   if (wrote) return wrote;
 
-  const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain|attach|suggest|close)$/);
+  const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|mouse|seen|explain|attach|suggest|close)$/);
   if (!match) return undefined;
   let key: string;
   try { key = decodeURIComponent(match[1]!); } catch { return json({ error: 'bad pane key' }, 400); }
@@ -845,6 +885,11 @@ function route(s: Store, url: URL, method: string, body: unknown): Response | un
     input(s, key, (body ?? {}) as InputBody);
     for (const es of sources) es.push(s, { state: true, screenKey: key });
     return noContent();
+  }
+  // The Hub builds the SGR bytes and refuses a report the client has not been told it may
+  // send. ponytail: the fixture screens do not move under a tap; the answer is the point.
+  if (method === 'POST' && match[2] === 'mouse') {
+    return (body as MouseBody | undefined)?.allow ? noContent() : json({ error: 'mouse-off' }, 409);
   }
   // The upload arrives as `{name, size}` from MockXMLHttpRequest: no bytes are kept, and
   // the reply is the same three fields the Hub sends.

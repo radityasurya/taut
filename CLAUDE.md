@@ -69,6 +69,14 @@ behind the two irreversible choices live in `docs/adr/`.
   next `state` SSE event already reflects the write. A herdr error code is the text before
   the first `: ` in the Error message and surfaces as `502 {error: code}`; `Error('unsupported')`
   is `501`.
+- Mouse reports are **SGR only** (`ESC [ < b ; col ; row M`, release `m`). The legacy X10
+  form `ESC [ M` is not recognised by `xterm-256color` and lands as keystrokes — it opened
+  htop's sort menu instead of moving the selection.
+- A press and its release must go out in **one** `pane.send_input` call. Split across two
+  calls, the program sees a press that never ends and the next tap does nothing.
+- `pane.process_info` returns `foreground_processes` in no particular order — it is not
+  parent-ordered, so the first entry is not the program on screen. Match
+  `foreground_process_group_id` first, then a known command name.
 - Write tests run only on throwaway servers from `test/harness.ts`; the live socket at
   `~/.config/herdr/herdr.sock` must never receive a write. For a manual check, start the Hub
   with `TAUTAN_PORT=7715 HERDR_SOCKET_PATH=<tmp>/h.sock` — never a Vite dev server proxying to

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { TmuxMux } from '../server/tmux.ts';
 import { AGENT_KEYS, SHELL_KEYS } from '../web/keys.ts';
 
-const tmuxAvailable = Bun.which('tmux') !== null;
+const tmuxAvailable = Bun.which('tmux') !== null && process.env.CODEX_SANDBOX_NETWORK_DISABLED !== '1';
 const eventually = async <T>(read: () => Promise<T>, accepts: (value: T) => boolean, timeout: number) => {
   const deadline = Date.now() + timeout;
   let value = await read();

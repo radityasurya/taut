@@ -134,9 +134,62 @@ Wrap reflows the same text to the column, never wider than the Pane's own
 | Wrap, agent Panes | on | `tautan.wrap.agent` = `on` \| `off` |
 | Wrap, shell Panes | off | `tautan.wrap.shell` = `on` \| `off` |
 | Smart replies | off | `tautan.smart` = `on` \| `off` |
+| Mouse taps | the App profile | `tautan.mouse.<paneKey>` = `on` \| `off` |
 
 Wrap is remembered per kind, not per Pane: agent output is prose and wants
 reflowing, a shell Pane is htop and logs, where the columns are the layout.
+
+**Affordances** (`shared/affordances.ts` finds them, `web/affordances.tsx`
+places them) are the tappable tokens tautan reads off the Screen: a Hint
+such as `esc to cancel`, `<d> describe` or `F9Kill`, a row of an option
+list, one of Claude Code's status items, a URL or a path. Each one is a
+transparent button drawn over the grid — no visible text, because the
+grid's own text is what you read — with a 1.5 px accent underline exactly
+under the token and a hit area of at least 44 px, grown around the token
+in both directions. The layer lives inside the `<pre>`, so it is in the
+grid's own coordinate space and Fit's transform scales it along with the
+text; the 44 px is divided by that scale, so a fitted grid keeps a
+thumb-sized target. A tap sends the key, types the text, runs the command
+with Enter, or copies. An option row moves the cursor by as many `↑` or
+`↓` as it is away; a long-press (500 ms, cancelled by 10 px) moves **and**
+confirms, in one send. Every send carries the same haptic the dock's keys
+do. The set is recomputed once per screen update, and only the rows near
+the viewport are drawn.
+
+The same Hints appear as **pills in the dock**, after the keys a blocked
+prompt offers and before the quick replies, deduped by label and by key
+against both — so `esc to cancel` next to a preset `No esc` is listed
+once. Eight at most. They are keys, not coordinates, so they stay while
+Wrap is on, unlike the boxes on the grid.
+
+**Mouse on the grid.** For an App profile with mouse forwarding on — k9s,
+htop, btop, lazygit, nvim, less — a gesture on the grid becomes a mouse
+report at a cell, built by the Hub and written to the pty as SGR. An
+Affordance box wins any tap it covers.
+
+| Gesture | Report |
+|---|---|
+| Tap | click (press and release) at the cell |
+| Second tap within 300 ms on the same cell | double click |
+| Long-press, 500 ms, cancelled by 10 px | right click |
+| Vertical drag | one wheel report per row of movement, dragging down looks back up the buffer |
+
+While forwarding is on, the grid carries `touch-action: pan-x`: the
+vertical drag belongs to the program, sideways scrolling stays the
+scroller's, so a 120-column grid is still readable across. A **mouse**
+chip sits at the right end of the Tab strip row while it is on. It is off
+while Wrap is on, because a cell needs the grid, and off for every program
+tautan does not know — an unknown program would type the bytes as text.
+
+**Mouse taps** in the ⋯ sheet is the per-Pane override. Its secondary line
+says where the state came from: `from k9s profile`, `overridden` once you
+touch it, or `off while Wrap is on` when Wrap has the last word. It writes
+`tautan.mouse.<paneKey>`; removing the key returns the Pane to its
+profile.
+
+**Copied chip.** Tapping a URL or a path copies it and prints a small
+`Copied` chip above the token for 1.5 s, counter-scaled so it reads at its
+own size under Fit. No toast: the chip stays where your thumb is.
 
 When Status is `blocked`, `web/blocked.tsx` draws a card above the dock: the
 detection's first line as a heading, the rule id, up to two excerpt lines in
@@ -156,16 +209,19 @@ The dock is the only place with input, and it is one bar plus what it opens:
 
 | Row | Agent Pane | Shell Pane |
 |---|---|---|
-| 1 | `esc` `↑` `↓` `enter` and the keys toggle, then a hairline, then the quick-reply pills | `esc` `tab` `enter` and the toggle; no pills |
+| 1 | `esc` `↑` `↓` `enter` and the keys toggle, then a hairline, then the pills | `esc` `tab` `enter` and the toggle, then the Hint pills the Screen printed |
 | 2 | the whole preset, while the toggle is on | the same, open by default |
 | 3 | the composer | — |
 
 The pills scroll at the right of the row behind the same right-edge fade the
 grid uses (`FADE`). The toggle carries `aria-expanded` and remembers its state
 per kind (`tautan.keys.agent`, `tautan.keys.shell`), and the row it opens rises
-into place with `.rise`, which reduced motion turns off. An agent Pane starts
-collapsed, because there the keyboard should meet the composer; a shell Pane
-starts open, because keys are all it has.
+into place with `.rise`, which reduced motion turns off. Which caps the row holds
+is the App profile's call (`web/profiles.ts`): an agent Pane gets the agent set,
+htop and less also get `F1`…`F10`, because their own footer offers them.
+
+An agent Pane starts collapsed, because there the keyboard should meet the
+composer; a shell Pane starts open, because keys are all it has.
 
 **Quick replies** (`web/replies.ts`, a pure function; `web/pane.tsx` renders
 them) scroll horizontally in one row, 8 px radius, 13 px:
@@ -179,7 +235,8 @@ them) scroll horizontally in one row, 8 px radius, 13 px:
 
 The order is: the keys `shared/blocked.ts` offers for the blocked prompt
 (`Yes ↵`, `No esc`, then the Mux's own hint keys), plus `↑` `↓` when the
-detection shows two or more numbered options; then up to three drafts from
+detection shows two or more numbered options; then the Hints the Screen itself
+printed; then up to three drafts from
 `StatePane.suggestions`; then the static set for the Agent — Claude Code gets
 Continue · Run the tests · Commit and push · Explain the diff · Stop here, Pi
 gets Continue · Run the tests · Show me the plan, any other Agent gets
@@ -419,7 +476,7 @@ title and the meta line.
 - **Rename**: one field, for a Workspace, Tab or Pane.
 - **More**: the ⋯ menu — the theme chips (`ThemeChips` from `web/settings.tsx`,
   the same strip the Settings screen shows), then Wrap, **Fit to width** with the
-  grid size as its hint, **Theme colors**, Diff, Rename, Close Pane, and a
+  grid size as its hint, **Theme colors**, **Mouse taps**, Diff, Rename, Close Pane, and a
   disabled `Resize to phone` marked `v2`.
 - **Close Pane** is a Dialog, not a drawer, so a destructive action cannot be
   swiped into by accident.

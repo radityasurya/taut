@@ -90,6 +90,17 @@ export class HerdrMux implements Mux {
 
   async sendText(paneId: string, text: string): Promise<void> { await this.rpc('pane.send_text', { pane_id: paneId, text }); }
   async sendKeys(paneId: string, keys: string[]): Promise<void> { await this.rpc('pane.send_keys', { pane_id: paneId, keys }); }
+  async sendRaw(paneId: string, raw: string): Promise<void> { if (raw) await this.rpc('pane.send_input', { pane_id: paneId, text: raw }); }
+
+  async foregroundCommand(paneId: string): Promise<string | undefined> {
+    const result = await this.rpc('pane.process_info', { pane_id: paneId });
+    const info = result.process_info ?? result;
+    const processes: Json[] = info.foreground_processes ?? [];
+    const known = new Set(['claude', 'pi', 'codex', 'k9s', 'htop', 'btop', 'lazygit', 'nvim', 'vim', 'less']);
+    const process = processes.find(item => item.pid === info.foreground_process_group_id)
+      ?? processes.find(item => known.has(String(item.name).toLowerCase())) ?? processes[0];
+    return process?.name;
+  }
 
   async explain(paneId: string): Promise<Explain | null> {
     try {

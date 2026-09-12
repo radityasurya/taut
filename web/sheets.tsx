@@ -169,7 +169,7 @@ export function MenuSheet({
   open: boolean;
   title: string;
   onClose: () => void;
-  items: { label: string; onClick?: () => void; hint?: string; danger?: boolean; disabled?: boolean }[];
+  items: { label: string; onClick?: () => void; hint?: string; sub?: string; danger?: boolean; disabled?: boolean }[];
   /** Anything the menu shows before its rows, such as the Pane sheet's theme chips. */
   head?: ReactNode;
 }) {
@@ -190,7 +190,11 @@ export function MenuSheet({
                 it.danger ? 'text-danger' : 'text-fg'
               }`}
             >
-              <span className="flex-1">{it.label}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block">{it.label}</span>
+                {/* Where a setting's value came from, in the same place a Toggle says it. */}
+                {it.sub && <span className="mt-px block text-caption text-muted">{it.sub}</span>}
+              </span>
               {it.hint && <span className="font-mono text-caption text-muted">{it.hint}</span>}
             </button>
           </li>

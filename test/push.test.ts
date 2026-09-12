@@ -44,7 +44,7 @@ describe.skipIf(!canListen)('web push', () => {
     const mux: Mux = {
       kind: 'herdr', id: 'fake', tree: async () => ({ ...tree, panes: [{ ...tree.panes[0]!, status }] }),
       read: async (_id: string, mode: ScreenMode): Promise<Screen> => ({ text: 'Need approval', ansi: false, revision: 1, mode }),
-      sendText: async () => {}, sendKeys: async () => {}, onChange: cb => { changed = cb; return () => {}; },
+      sendText: async () => {}, sendKeys: async () => {}, sendRaw: async () => {}, onChange: cb => { changed = cb; return () => {}; },
       newTab: async (): Promise<Pane> => tree.panes[0]!, newWorkspace: async (): Promise<Workspace> => tree.workspaces[0]!,
       rename: async () => {}, closePane: async () => {}, explain: async (): Promise<Explain | null> => null, close: () => {},
     };
@@ -100,7 +100,7 @@ describe.skipIf(!canListen)('web push', () => {
     let calls = 0;
     const mux = {
       kind: 'herdr', id: 'timer', tree: async () => { calls++; return { workspaces: [], tabs: [], panes: [] }; },
-      read: async () => { throw new Error('unused'); }, sendText: async () => {}, sendKeys: async () => {}, onChange: () => () => {},
+      read: async () => { throw new Error('unused'); }, sendText: async () => {}, sendKeys: async () => {}, sendRaw: async () => {}, onChange: () => () => {},
       newTab: async () => { throw new Error('unused'); }, newWorkspace: async () => { throw new Error('unused'); }, rename: async () => {},
       closePane: async () => {}, explain: async () => null, close: () => {},
     } satisfies Mux;

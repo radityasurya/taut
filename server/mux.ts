@@ -3,10 +3,19 @@ import { generateKeyPairSync } from 'node:crypto';
 import os from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseAnsi } from '../shared/ansi.ts';
-import type { Explain, HostConfig, InputBody, Mux, NewTabBody, NewTabResult, NewWorkspaceBody, NewWorkspaceResult, PushSubscriptionBody, RenameBody, Screen, ScreenEvent, ScreenMode, Settings, State, StateHost, StatePane, Tree } from '../shared/types.ts';
+import type { Explain, HostConfig, InputBody, MouseBody, Mux, NewTabBody, NewTabResult, NewWorkspaceBody, NewWorkspaceResult, PushSubscriptionBody, RenameBody, Screen, ScreenEvent, ScreenMode, Settings, State, StateHost, StatePane, Tree } from '../shared/types.ts';
 import { sendPush, type VapidKeys } from './push.ts';
 import { configureSuggest, type SuggestAdapter } from './suggest.ts';
 import { hostId as localHostId, hostsConfigPath } from './hosts.ts';
+
+export function mouseBytes(body: MouseBody): string {
+  const report = (button: number, release = true) => `\x1b[<${button};${body.col};${body.row}M${release ? `\x1b[<${button};${body.col};${body.row}m` : ''}`;
+  if (body.kind === 'right') return report(2);
+  if (body.kind === 'double') return report(0) + report(0);
+  if (body.kind === 'wheelUp') return report(64, false);
+  if (body.kind === 'wheelDown') return report(65, false);
+  return report(0);
+}
 
 export interface HubListener {
   onState(s: State): void;
@@ -27,7 +36,7 @@ export class Hub {
   private screenTimers = new Map<HubListener, ReturnType<typeof setTimeout>>();
   private cached?: State;
   private statuses = new Map<string, { status: string; at: number }>();
-  private lastLines = new Map<string, { revision: number; line?: string; excerpt?: string }>();
+  private lastLines = new Map<string, { revision: number; line?: string; excerpt?: string; command?: string }>();
   private suggestions = new Map<string, { revision: number; values: string[] }>();
   private suggestionTriggers = new Set<string>();
   private suggestionRequests = new Set<string>();
@@ -129,15 +138,20 @@ export class Hub {
   }
 
   private async fillLastLines(muxKey: string, entry: Entry): Promise<void> {
-    const pending = (entry.tree?.panes ?? []).filter(pane => pane.agent && this.lastLines.get(`${muxKey}/${pane.id}`)?.revision !== pane.revision);
+    const pending = (entry.tree?.panes ?? []).filter(pane => this.lastLines.get(`${muxKey}/${pane.id}`)?.revision !== pane.revision);
     await Promise.all(pending.map(async pane => {
       const key = `${muxKey}/${pane.id}`;
       await this.acquireLastLineRead();
       try {
-        const screen = await entry.mux.read(pane.id, 'visible');
-        const lines = parseAnsi(screen.text).map(spans => spans.map(span => span.text).join('').trim()).filter(Boolean);
-        const line = lines.at(-1)?.slice(0, 200);
-        this.lastLines.set(key, { revision: pane.revision, line, excerpt: lines.slice(-40).join('\n') });
+        const commandLookup = (entry.mux as Mux & { foregroundCommand?: (id: string) => Promise<string | undefined> }).foregroundCommand;
+        const command = pane.agent || !commandLookup ? pane.command : await commandLookup.call(entry.mux, pane.id);
+        if (command) pane.command = command;
+        if (pane.agent) {
+          const screen = await entry.mux.read(pane.id, 'visible');
+          const lines = parseAnsi(screen.text).map(spans => spans.map(span => span.text).join('').trim()).filter(Boolean);
+          const line = lines.at(-1)?.slice(0, 200);
+          this.lastLines.set(key, { revision: pane.revision, line, excerpt: lines.slice(-40).join('\n'), command });
+        } else this.lastLines.set(key, { revision: pane.revision, command });
       } catch {
         this.lastLines.set(key, { revision: pane.revision });
       } finally {
@@ -190,7 +204,7 @@ export class Hub {
         this.statuses.set(key, status);
         if (pane.status === 'working' || pane.status === 'idle') this.suggestions.delete(key);
         const cachedSuggestion = this.suggestions.get(key);
-        state.panes.push({ key, muxKey, ...pane, seenRevision: this.seen[key] ?? 0, lastLine: pane.agent ? this.lastLines.get(key)?.line : undefined, statusChangedAt: status.at,
+        state.panes.push({ key, muxKey, ...pane, command: pane.command ?? this.lastLines.get(key)?.command, seenRevision: this.seen[key] ?? 0, lastLine: pane.agent ? this.lastLines.get(key)?.line : undefined, statusChangedAt: status.at,
           suggestions: cachedSuggestion?.revision === pane.revision ? cachedSuggestion.values : undefined });
         const screen = this.lastLines.get(key);
         if (this.suggestEnabled && this.suggestAdapter && pane.agent && (pane.status === 'blocked' || pane.status === 'done') &&
@@ -274,6 +288,7 @@ export class Hub {
     if (!found) throw new Error('pane not found');
     if (body.text !== undefined) await found.entry.mux.sendText(found.paneId, body.text);
     if (body.keys?.length) await found.entry.mux.sendKeys(found.paneId, body.keys);
+    if (body.raw !== undefined) await found.entry.mux.sendRaw(found.paneId, body.raw);
   }
   async explain(paneKey: string): Promise<Explain | null> {
     await this.state(); const found = this.resolve(paneKey);

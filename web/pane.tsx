@@ -1,17 +1,20 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { findAffordances } from '../shared/affordances.ts';
 import { parseAnsi } from '../shared/ansi.ts';
 import type {
   Explain, InputBody, NewTabBody, NewTabResult, RenameBody, ScreenEvent, SeenBody, Span, State, StatePane, Status,
 } from '../shared/types.ts';
+import { AffordanceLayer, hintPills, useCell, useMouseForward } from './affordances.tsx';
 import { api, haptic, navigate, opensWith, post } from './app.tsx';
 import { Blocked } from './blocked.tsx';
+import { mouseAllowed, profileFor, setMouseOverride } from './profiles.ts';
 import { commonAgent, Dot, markSeen, statusText } from './home.tsx';
 import { Attach, Back, ChevronDown, Down, Keyboard, Mic, More, Plus, Send, Speaker } from './icons.tsx';
 import { ConfirmCloseSheet, MenuSheet, NewTabSheet, RenameSheet } from './sheets.tsx';
 import { ThemeChips } from './settings.tsx';
 import { SwitchDrawer } from './switch.tsx';
-import { AGENT_KEYS, INLINE_KEYS, SHELL_KEYS } from './keys.ts';
+import { AGENT_KEYS, SHELL_KEYS } from './keys.ts';
 import { quickReplies } from './replies.ts';
 
 // ---- themed terminal colours ----
@@ -112,6 +115,9 @@ export function Ansi({ text }: { text: string }) {
     </>
   );
 }
+
+/** Every key cap label the presets spell out, for the key bar an App profile asks for. */
+const KEY_LABEL = new Map([...AGENT_KEYS, ...SHELL_KEYS]);
 
 const ROLL: Status[] = ['blocked', 'working', 'done', 'idle', 'unknown'];
 const rollUp = (panes: StatePane[]): Status => ROLL.find((s) => panes.some((p) => p.status === s)) ?? 'unknown';
@@ -268,6 +274,29 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
     addEventListener('resize', onResize);
     return () => removeEventListener('resize', onResize);
   }, []);
+
+  // ---- interactive screen (ADR 0003) ----
+  // The App profile is the gate: it says which Hints to look for, which keys the dock
+  // carries, and whether this program reads a mouse report at all.
+  const profile = useMemo(() => profileFor(pane), [pane?.agent, pane?.command]);
+  const affordances = useMemo(() => findAffordances(lines, profile), [lines, profile]);
+  const cell = useCell(pre, scale, fonts);
+  /** Bumped by the ⋯ switch, so the per-Pane override is re-read without a second store. */
+  const [override, setOverride] = useState(0);
+  const mouseOn = useMemo(() => mouseAllowed(paneKey, pane), [paneKey, pane?.agent, pane?.command, override]);
+  // Cell coordinates need the grid, so both mechanisms stop at Wrap.
+  const forwarding = mouseOn && !wrap;
+  /** The row window the overlay draws, in tens of rows, so scrolling repaints it rarely. */
+  const [band, setBand] = useState(0);
+  const mouse = useMouseForward({
+    paneKey,
+    on: forwarding,
+    pre,
+    cell,
+    scale,
+    cols: pane?.cols ?? 80,
+    rows: pane?.rows ?? lines.length,
+  });
 
   useEffect(() => {
     const el = pre.current;
@@ -511,9 +540,28 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
   const canDictate = 'webkitSpeechRecognition' in window;
   const active = tabs.find((t) => t.id === pane?.tabId);
   const grid = pane?.cols && pane.rows ? `${pane.cols}×${pane.rows}` : 'fit';
-  const pills = agent ? quickReplies({ agent, explain, suggestions: pane?.suggestions, smart }) : [];
-  const preset = agent ? AGENT_KEYS : SHELL_KEYS;
-  const inlineKeys = preset.filter(([name]) => INLINE_KEYS[kind].includes(name));
+  // The App profile decides for every Pane running that program; the switch decides for
+  // this one. Wrap wins over both, so the row says so rather than lying about the state.
+  const mouseSource =
+    mouseOn && wrap
+      ? 'off while Wrap is on'
+      : localStorage.getItem(`tautan.mouse.${paneKey}`)
+        ? 'overridden'
+        : `from ${pane?.command ?? pane?.agent ?? 'the generic'} profile`;
+  const replies = agent ? quickReplies({ agent, explain, suggestions: pane?.suggestions, smart }) : [];
+  // The keys the blocked prompt offers stay first, because answering it is why the Pane is
+  // open; then the Hints the Screen itself printed, then the quick replies. Deduped, so a
+  // Hint that repeats the prompt's own `esc to cancel` is listed once.
+  const pills = [
+    ...replies.filter((p) => p.kind === 'key'),
+    ...hintPills(affordances, replies),
+    ...replies.filter((p) => p.kind === 'text'),
+  ];
+  // The App profile owns the key bar now: htop and less carry the function keys their own
+  // footer advertises, an agent carries the agent set. The cap's label is the key bar's own
+  // spelling, so a name the base sets do not carry prints as `F1`.
+  const preset = profile.keys.all.map((name) => [name, KEY_LABEL.get(name) ?? name.toUpperCase()] as [string, string]);
+  const inlineKeys = preset.filter(([name]) => profile.keys.inline.includes(name));
   // One column for the whole screen, the grid's own width plus the scroller's padding, so a
   // desktop centres a content-sized Pane instead of stretching every bar to the window. A
   // phone is simply the window. See DESIGN.md "Terminal width on a phone".
@@ -629,6 +677,12 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
               style={{ width: underline.w, transform: `translateX(${underline.x}px)` }}
             />
           </div>
+          {/* Taps on the grid are going to the program, not to tautan. */}
+          {forwarding && (
+            <span className="mb-2 ml-1.5 shrink-0 self-end rounded-chip border border-border px-1.5 py-0.5 font-mono text-[10px] text-accent">
+              mouse
+            </span>
+          )}
         </div>
 
         {/* Row two: the Panes of the Tab the underline points at. */}
@@ -658,25 +712,25 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
       <div className="relative min-h-0 flex-1">
         <div
           ref={box}
+          {...mouse}
           onScroll={(e) => {
             const el = e.currentTarget;
             pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
             if (pinned.current) setFresh(false);
+            setBand(Math.floor(el.scrollTop / Math.max(1, cell.rh * scale) / 10));
             measure();
           }}
           className="h-full overflow-auto pt-1 pb-2 pl-4 lg:pr-4"
-          style={
-            fade
-              ? {
-                  maskImage: FADE,
-                  WebkitMaskImage: FADE,
-                }
-              : undefined
-          }
+          style={{
+            ...(fade ? { maskImage: FADE, WebkitMaskImage: FADE } : null),
+            // A vertical drag is the app's wheel while forwarding; sideways stays the
+            // scroller's, so a 120-column grid can still be read across.
+            ...(forwarding ? { touchAction: 'pan-x' as const } : null),
+          }}
         >
           <pre
             ref={pre}
-            className={`font-mono text-caption lg:mx-auto ${
+            className={`relative font-mono text-caption lg:mx-auto ${
               // Wrapped text takes the column; unwrapped text keeps the grid's own width.
               // `w-max` would be max-content, which never wraps, so Wrap needs `w-full`.
               wrap ? 'w-full break-words whitespace-pre-wrap' : 'w-max min-w-full whitespace-pre lg:min-w-0'
@@ -697,6 +751,17 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
                 {'\n'}
               </Fragment>
             ))}
+            {/* Inside the `<pre>`, so the Fit transform scales the boxes with the text. */}
+            {!wrap && affordances.length > 0 && (
+              <AffordanceLayer
+                paneKey={paneKey}
+                list={affordances}
+                cell={cell}
+                scale={scale}
+                from={band * 10 - 10}
+                to={band * 10 + 60}
+              />
+            )}
           </pre>
         </div>
         {fresh && (
@@ -960,6 +1025,14 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
             onClick: () => {
               setThemedColors(!themedOn);
               setThemedOn(!themedOn);
+            },
+          },
+          {
+            label: mouseOn ? 'Mouse taps: on' : 'Mouse taps: off',
+            sub: mouseSource,
+            onClick: () => {
+              setMouseOverride(paneKey, mouseOn ? 'off' : 'on');
+              setOverride((n) => n + 1);
             },
           },
           ...(ws ? [{ label: 'Diff', onClick: () => navigate(`#/diff/${encodeURIComponent(ws.key)}`) }] : []),

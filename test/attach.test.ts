@@ -42,7 +42,7 @@ describe.skipIf(!canListen)('pane attachments', () => {
     const mux: Mux = {
       kind: 'herdr', id: 'fake', tree: async () => tree,
       read: async (_id: string, mode: ScreenMode): Promise<Screen> => ({ text: '', ansi: false, revision: 1, mode }),
-      sendText: async () => {}, sendKeys: async () => {}, onChange: () => () => {},
+      sendText: async () => {}, sendKeys: async () => {}, sendRaw: async () => {}, onChange: () => () => {},
       newTab: async (): Promise<Pane> => tree.panes[0]!, newWorkspace: async (): Promise<Workspace> => tree.workspaces[0]!,
       rename: async () => {}, closePane: async () => {}, explain: async (): Promise<Explain | null> => null, close: () => {},
     };

@@ -24,7 +24,7 @@ export function parseTree(stdout: string): Tree {
     if (!tabs.has(tabId!)) tabs.set(tabId!, { id: tabId!, workspaceId: workspaceId!, label: tabLabel! });
     panes.push({
       id: paneId!, tabId: tabId!, workspaceId: workspaceId!, title, cwd,
-      ...(agents.has(command!) ? { agent: command } : {}), status: 'unknown', revision: 1,
+      command, ...(agents.has(command!) ? { agent: command } : {}), status: 'unknown', revision: 1,
       cols: Number(width), rows: Number(height),
     });
   }
@@ -118,6 +118,11 @@ export class TmuxMux implements Mux {
     const translated = keys.map(tmuxKey);
     if (!translated.length) return;
     await this.run(['send-keys', '-t', paneId, '--', ...translated]);
+  }
+
+  async sendRaw(paneId: string, raw: string): Promise<void> {
+    if (!raw) return;
+    await this.run(['send-keys', '-t', paneId, '-H', ...Buffer.from(raw).toString('hex').match(/../g)!]);
   }
 
   onChange(cb: (paneIds: string[] | 'all') => void): () => void {

@@ -18,7 +18,7 @@ const fakeMux = (pane: Pane, onRead?: () => void): Mux => {
   return {
     kind: 'herdr', id: 'fake', tree: async () => tree,
     read: async (_id: string, mode: ScreenMode): Promise<Screen> => { onRead?.(); return { text: '\n first \n\n latest output \n', ansi: false, revision: pane.revision, mode }; },
-    sendText: async () => {}, sendKeys: async () => {}, onChange: () => () => {},
+    sendText: async () => {}, sendKeys: async () => {}, sendRaw: async () => {}, onChange: () => () => {},
     newTab: async (): Promise<Pane> => pane, newWorkspace: async (): Promise<Workspace> => tree.workspaces[0]!,
     rename: async () => {}, closePane: async () => {}, explain: async (): Promise<Explain | null> => null, close: () => {},
   };

@@ -160,6 +160,10 @@ capability flags: the UI hides write actions when `kind === 'tmux'`.
   already `blocked` sends nothing, and `done` never pushes — it is a badge.
 - Each SSE client may watch one Pane: changes on it → 150 ms debounce → `read()` → SSE `screen`.
 - **Seen** is `{paneKey: revision}` persisted in `state.json`; unseen = `revision > seen`.
+- `StatePane.command` is the Pane's foreground command name, which picks the App profile on
+  the phone: tmux reads `pane_current_command`, herdr answers `pane.process_info` through
+  `HerdrMux.foregroundCommand`. It is read with the last line, once per revision, and cached
+  with it, because `foreground_processes` is a per-Pane call.
 - The Hub never calls any `*.focus` method.
 
 ## HTTP API (`server/http.ts`)
@@ -169,7 +173,8 @@ capability flags: the UI hides write actions when `kind === 'tmux'`.
 | `GET /api/state` | hosts, muxes, workspaces, panes (with status, revision, seenRevision, preview) |
 | `GET /api/events?pane=<key>` | SSE: `state`, `screen`; comment ping every 25 s |
 | `GET /api/panes/:key/screen?mode=visible\|recent` | one Screen |
-| `POST /api/panes/:key/input` `{text?, keys?}` | text first, then keys |
+| `POST /api/panes/:key/input` `{text?, keys?, raw?}` | text first, then keys, then `raw` — bytes written to the pty untouched |
+| `POST /api/panes/:key/mouse` `{kind, col, row, allow}` | `kind` is `click\|right\|double\|wheelUp\|wheelDown`, `col`/`row` are 1-based cells; the Hub builds the SGR press and release (`mouseBytes`) and sends them as `raw` → 204. 400 `{error: 'body'}` on an unknown kind or a coordinate outside 1…9999, 409 `{error: 'mouse-off'}` unless `allow` is true |
 | `POST /api/panes/:key/seen` `{revision}` | mark Seen |
 | `GET /api/panes/:key/explain` | Explain or null |
 | `POST /api/panes/:key/attach` (raw body, `X-Name: <filename>`) | write the file on the Pane's Host → `{path, bytes, display}`; 413 over `TAUTAN_MAX_ATTACHMENT_MB` |

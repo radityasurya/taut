@@ -2,6 +2,7 @@
 // Pure — no React, no fetch. `web/pane.tsx` renders them and decides what a tap does.
 import { offeredKeys } from '../shared/blocked.ts';
 import type { Explain } from '../shared/types.ts';
+import { profileFor } from './profiles.ts';
 
 export interface Pill {
   /** `key` sends its keys at once; `text` fills the composer for review. */
@@ -20,18 +21,6 @@ export interface Pill {
 
 /** The key bar's own spelling, so a pill and a key cap name the same key. */
 const GLYPH: Record<string, string> = { enter: '↵', esc: 'esc', tab: 'tab', up: '↑', down: '↓' };
-
-/** Static text pills per Agent. `pane.agent` is the Mux's own word: `claude`, `pi`, `codex`. */
-const STATIC: { match: (agent: string) => boolean; texts: string[] }[] = [
-  {
-    match: (a) => a.includes('claude'),
-    texts: ['Continue', 'Run the tests', 'Commit and push', 'Explain the diff', 'Stop here'],
-  },
-  { match: (a) => a === 'pi', texts: ['Continue', 'Run the tests', 'Show me the plan'] },
-];
-
-const staticTexts = (agent?: string): string[] =>
-  STATIC.find((s) => s.match((agent ?? '').toLowerCase()))?.texts ?? ['Continue'];
 
 const plain = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, '').replace(/[│┃|]/g, ' ');
 
@@ -64,7 +53,7 @@ export function quickReplies(o: {
 
   const texts = [
     ...(o.smart ? (o.suggestions ?? []).slice(0, 3).map((t) => [t, true] as const) : []),
-    ...staticTexts(o.agent).map((t) => [t, false] as const),
+    ...profileFor({ agent: o.agent }).replies.map((t) => [t, false] as const),
   ];
   const seen = new Set<string>();
   for (const [label, generated] of texts) {

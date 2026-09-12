@@ -108,6 +108,27 @@ nothing new.
 - **Nothing comes back.** The Hub never serves an attachment, lists the directory, or
   deletes a finished file. Clean the directory yourself when you want the space back.
 
+## Interactive screen
+
+An Affordance and a mouse report both end as bytes in the Pane's pty, through the same
+`pane.send_input` that the composer uses. `raw` on `POST /api/panes/:key/input` is the one
+field that is not escaped on the way: whatever the client sends reaches the program as it
+stands, escape sequences included. That is the point — an SGR mouse report is an escape
+sequence — and it is also why only the Hub builds those bytes.
+
+- **Mouse bytes are typed text to a program that never asked for them.** A program with no
+  mouse mode on prints `\x1b[<0;5;9M` as keystrokes, which is how an earlier X10 report
+  opened htop's sort menu. So the Hub answers 409 `{error: 'mouse-off'}` unless the request
+  asserts `allow`, and the client only asserts it from the App profile or the per-Pane
+  switch. An unknown program is off by default, and the contract test proves a plain shell
+  receives nothing.
+- **The Hub validates before it sends.** The kind must be one of the five, and each
+  coordinate must be an integer in 1…9999, so a report cannot carry an arbitrary payload
+  into the `raw` path.
+- **Both are Origin-guarded**, like every other write, and both need the trusted login when
+  one is set. Nothing new is exposed: a phone that can type into a Pane can already do
+  everything the keys do.
+
 ## Diff review
 
 `GET /api/workspaces/:key/diff` runs `git diff` in that Workspace's cwd. The

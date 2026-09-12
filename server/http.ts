@@ -1,9 +1,9 @@
 import { isAbsolute, resolve, sep } from 'node:path';
-import type { DiffResult, DiffScope, HostConfig, InputBody, NewTabBody, NewWorkspaceBody, ProbeBody, PushSubscriptionBody, RenameBody, ScreenMode, SeenBody, SettingsBody, SuggestSettingBody } from '../shared/types.ts';
+import type { DiffResult, DiffScope, HostConfig, InputBody, MouseBody, NewTabBody, NewWorkspaceBody, ProbeBody, PushSubscriptionBody, RenameBody, ScreenMode, SeenBody, SettingsBody, SuggestSettingBody } from '../shared/types.ts';
 import { parseUnifiedDiff } from '../shared/diff.ts';
 import { HerdrMux } from './herdr.ts';
 import { discoverLocalMuxes, discoverRemote, hostId, startRemoteHost, syncHosts, validTarget, validateHosts, writeHostsConfig } from './hosts.ts';
-import type { Hub } from './mux.ts';
+import { mouseBytes, type Hub } from './mux.ts';
 import { EmptyBody, sanitizeName, TooLarge, writeAttachment } from './attach.ts';
 
 const json = (value: unknown, status = 200) => Response.json(value, { status });
@@ -217,6 +217,18 @@ export function startHttp(hub: Hub, opts: {
           });
           return new Response(stream, { headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' } });
         }
+        const mouseMatch = url.pathname.match(/^\/api\/panes\/([^/]+)\/mouse$/);
+        if (req.method === 'POST' && mouseMatch) {
+          let body: MouseBody;
+          try { body = await req.json(); } catch { return json({ error: 'body' }, 400); }
+          const coordinate = (value: unknown) => Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 9999;
+          if (!plainObject(body) || !['click', 'right', 'double', 'wheelUp', 'wheelDown'].includes(body.kind) || !coordinate(body.col) || !coordinate(body.row))
+            return json({ error: 'body' }, 400);
+          if (body.allow !== true) return json({ error: 'mouse-off' }, 409);
+          let key: string;
+          try { key = decodeURIComponent(mouseMatch[1]!); } catch { return json({ error: 'bad pane key' }, 400); }
+          await hub.input(key, { raw: mouseBytes(body) }); return new Response(null, { status: 204 });
+        }
         const match = url.pathname.match(/^\/api\/panes\/([^/]+)\/(screen|input|seen|explain|attach|suggest|close)$/);
         if (match) {
           let key: string;
@@ -254,7 +266,8 @@ export function startHttp(hub: Hub, opts: {
             let body: InputBody;
             try { body = await req.json(); } catch { return json({ error: 'body' }, 400); }
             if (typeof body !== 'object' || body === null || Array.isArray(body) || body.text !== undefined && typeof body.text !== 'string' ||
-              body.keys !== undefined && (!Array.isArray(body.keys) || body.keys.some(key => typeof key !== 'string'))) return json({ error: 'body' }, 400);
+              body.keys !== undefined && (!Array.isArray(body.keys) || body.keys.some(key => typeof key !== 'string')) ||
+              body.raw !== undefined && typeof body.raw !== 'string') return json({ error: 'body' }, 400);
             await hub.input(key, body); return new Response(null, { status: 204 });
           }
           if (req.method === 'POST' && action === 'seen') {
