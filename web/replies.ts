@@ -2,6 +2,7 @@
 // Pure — no React, no fetch. `web/pane.tsx` renders them and decides what a tap does.
 import { offeredKeys } from '../shared/blocked.ts';
 import type { Explain } from '../shared/types.ts';
+import { keyGlyph } from './keys.ts';
 import { profileFor } from './profiles.ts';
 
 export interface Pill {
@@ -19,8 +20,19 @@ export interface Pill {
   generated?: boolean;
 }
 
-/** The key bar's own spelling, so a pill and a key cap name the same key. */
-const GLYPH: Record<string, string> = { enter: '↵', esc: 'esc', tab: 'tab', up: '↑', down: '↓' };
+/**
+ * A pill is a label plus a key, on one line of a scrolling row, so the label is the verb
+ * and nothing else: the parenthesised hint the footer repeats is dropped, so is the `on`
+ * or `off` of a mode, and a long one is cut. The full text stays in the accessible name.
+ */
+export function pillLabel(text: string): string {
+  const short = text
+    .replace(/\([^)]*\)?/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/ (on|off)$/i, '');
+  return short.length > 14 ? `${short.slice(0, 13).replace(/[\s,.;:'’-]+$/, '')}…` : short;
+}
 
 const plain = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, '').replace(/[│┃|]/g, ' ');
 
@@ -46,7 +58,7 @@ export function quickReplies(o: {
 
   if (o.explain) {
     for (const k of offeredKeys(o.explain)) {
-      pills.push({ kind: 'key', label: k.label, aria: `${k.label}, ${k.key}`, keys: [k.key], glyph: GLYPH[k.key] ?? k.key });
+      pills.push({ kind: 'key', label: pillLabel(k.label), aria: `${k.label}, ${k.key}`, keys: [k.key], glyph: keyGlyph(k.key) });
     }
     // ↑ ↓ live in the dock's inline keys now, so a numbered list adds no arrow pills.
   }

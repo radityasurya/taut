@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isNumberedList, quickReplies } from '../web/replies.ts';
+import { isNumberedList, pillLabel, quickReplies } from '../web/replies.ts';
 import type { Explain } from '../shared/types.ts';
 
 const BOX: Explain = {
@@ -24,6 +24,17 @@ describe('isNumberedList', () => {
   });
   test('one option is not a list', () => {
     expect(isNumberedList('Press enter to continue\n1. Yes')).toBe(false);
+  });
+});
+
+describe('pillLabel', () => {
+  test('a mode keeps its name, not its state or the hint beside it', () => {
+    expect(pillLabel('auto mode on')).toBe('auto mode');
+    expect(pillLabel('accept edits on (shift+tab to cycle)')).toBe('accept edits');
+  });
+  test('a long label is cut to fit the row', () => {
+    expect(pillLabel('Yes, and don’t ask again')).toBe('Yes, and don…');
+    expect(pillLabel('cancel')).toBe('cancel');
   });
 });
 

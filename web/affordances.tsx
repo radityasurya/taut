@@ -6,6 +6,8 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, RefObject } from 'react';
 import type { Action, Affordance, InputBody, MouseBody } from '../shared/types.ts';
 import { haptic, post } from './app.tsx';
+import { keyGlyph } from './keys.ts';
+import { pillLabel } from './replies.ts';
 import type { Pill } from './replies.ts';
 
 /** The grid's cell, in unscaled CSS pixels: one column wide, one row high. */
@@ -215,9 +217,6 @@ export function AffordanceLayer({
   );
 }
 
-/** The key bar's own spelling, so a Hint pill and a key cap name the same key. */
-const GLYPH: Record<string, string> = { enter: '↵', esc: 'esc', tab: 'tab', up: '↑', down: '↓' };
-
 /**
  * Hints as dock pills, ahead of the quick replies. An option row is not a Hint, and a key
  * or a label the dock already offers is dropped, so the blocked preset is never doubled.
@@ -232,7 +231,7 @@ export function hintPills(list: Affordance[], taken: Pill[], max = 8): Pill[] {
     if (!label || seen.has(label.toLowerCase()) || seen.has(keys)) continue;
     seen.add(label.toLowerCase());
     seen.add(keys);
-    pills.push({ kind: 'key', label, aria: `${label}, ${a.action.keys.join(' ')}`, keys: a.action.keys, glyph: GLYPH[keys] ?? keys });
+    pills.push({ kind: 'key', label: pillLabel(label), aria: `${label}, ${a.action.keys.join(' ')}`, keys: a.action.keys, glyph: keyGlyph(keys) });
     if (pills.length === max) break;
   }
   return pills;

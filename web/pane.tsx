@@ -571,38 +571,34 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
 
   return (
     <div className="mx-auto flex h-dvh w-full flex-col pt-[env(safe-area-inset-top)]" style={{ maxWidth: column }}>
-      {/* One grid, laid out by width: back · title · Switch · spacer · actions, with the
-          status line on a second row under the title. */}
-      <header className="grid h-11 shrink-0 grid-cols-[auto_minmax(0,auto)_auto_1fr_auto] grid-rows-2 items-center px-1">
-        <a href="#/" aria-label="All panes" className="row-span-2 flex size-11 items-center justify-center text-accent">
+      {/* One 44 px row, everything centred on it: back · title · status, which is also the
+          Switch trigger · actions. The title never shrinks below its own text until it would
+          take more than 60 % of the row, so what gives way on a phone is the status text. */}
+      <header className="flex h-11 shrink-0 items-center px-1">
+        <a href="#/" aria-label="All panes" className="flex size-11 shrink-0 items-center justify-center text-accent">
           <Back />
         </a>
-        <h1 className="truncate text-title tracking-tight">{pane?.title ?? '…'}</h1>
+        <h1 className="max-w-[60%] shrink-0 truncate text-title tracking-tight">{pane?.title ?? '…'}</h1>
+        {/* Status and the ⌄ are one trigger: one drawer, one name, one hit area. */}
         <button
           type="button"
           aria-label="Switch Pane"
           onClick={() => setShowSwitch(true)}
-          className="press flex h-6 w-6 items-center justify-center text-muted"
-        >
-          <ChevronDown />
-        </button>
-        {/* The same drawer as the ⌄ above it. Its own words are its name, so a screen
-            reader does not hear "Switch Pane" twice in one bar. */}
-        <button
-          type="button"
-          onClick={() => setShowSwitch(true)}
-          className="col-start-2 col-end-5 row-start-2 flex min-w-0 items-center gap-1.5 text-caption text-muted"
+          className="press flex h-11 min-w-0 items-center gap-1.5 pl-2 text-caption text-muted"
         >
           <Dot status={status} />
-          <span aria-live="polite" className={statusText[status]}>
+          <span aria-live="polite" className={`shrink-0 ${statusText[status]}`}>
             {status}
           </span>
           <span className="truncate">
             · {agent ?? 'shell'} · {ws?.label}
           </span>
+          <span aria-hidden className="flex shrink-0 items-center">
+            <ChevronDown />
+          </span>
         </button>
         {/* What is left after the Tab strip took + and the ⋯ sheet took Fit. */}
-        <div className="col-start-5 row-span-2 flex items-center gap-0.5 pl-1">
+        <div className="ml-auto flex items-center gap-0.5 pl-1">
           {agent && (
             <button
               type="button"
@@ -685,9 +681,15 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
           )}
         </div>
 
-        {/* Row two: the Panes of the Tab the underline points at. */}
+        {/* Row two: the Panes of the Tab the underline points at. It carries the section's
+            hairline on its own top edge — pulled up by the pixel the row above draws, so the
+            two rows share one line — and starts where the Tab labels do, not under the +. */}
         {active && active.panes.length > 1 && (
-          <div role="group" aria-label="Panes in this Tab" className="hscroll flex gap-1.5 pt-1.5">
+          <div
+            role="group"
+            aria-label="Panes in this Tab"
+            className={`hscroll -mt-px flex gap-1.5 border-t border-border pt-1.5 ${writable ? 'pl-10' : ''}`}
+          >
             {active.panes.map((p) => (
               <button
                 key={p.key}
@@ -791,6 +793,23 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
         {/* One bar: the keys a hand reaches for on the left, the replies you tap on the right. */}
         <div className="flex items-center gap-2 pl-4">
           <div className="flex shrink-0 items-center gap-1">
+            {/* The toggle opens the rest of the preset, so it leads the row it belongs to.
+                Filled, not a ghost: a control among the caps, and accent while it is open. */}
+            <button
+              type="button"
+              aria-label="Keys"
+              aria-expanded={showKeys}
+              aria-controls="pane-keys"
+              onClick={() => {
+                haptic();
+                setShowKeys(!showKeys);
+              }}
+              className={`press flex size-9 items-center justify-center rounded-chip border ${
+                showKeys ? 'border-accent bg-accent text-bg' : 'border-border bg-surface text-fg'
+              }`}
+            >
+              <Keyboard />
+            </button>
             {inlineKeys.map(([name, label]) => (
               <button
                 key={name}
@@ -802,21 +821,6 @@ export function PaneScreen({ paneKey, state, screen }: { paneKey: string; state:
                 {label}
               </button>
             ))}
-            <button
-              type="button"
-              aria-label="Keys"
-              aria-expanded={showKeys}
-              aria-controls="pane-keys"
-              onClick={() => {
-                haptic();
-                setShowKeys(!showKeys);
-              }}
-              className={`press flex size-9 items-center justify-center rounded-chip border ${
-                showKeys ? 'border-accent bg-accent text-bg' : 'border-border text-muted'
-              }`}
-            >
-              <Keyboard />
-            </button>
           </div>
           {pills.length > 0 && (
             <div

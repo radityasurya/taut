@@ -79,19 +79,23 @@ label carries the fact. An offline Host adds a red row linking to Hosts. While
 
 ## Pane (`#/pane/<key>`) — `web/pane.tsx`
 
-Top bar: one 44 px grid, laid out by width. Row 1 is back · title · the ⌄ that
-opens the Switch drawer · a spacer · **Read aloud** (agent Panes only) and
-**More**. Row 2, under the title, is the status line — Dot, the Status word
-(`aria-live="polite"`), Agent and Workspace — and it opens the Switch drawer
-too. No setting lives in the bar: Wrap, Fit and Theme colors are rows in the ⋯
-sheet, and + belongs to the Tab strip.
+Top bar: one 44 px row, every item centred on it — back · title · the status ·
+a spacer · **Read aloud** (agent Panes only) and **More**. The status sits right
+after the title in 12 px muted: Dot, the Status word (`aria-live="polite"`),
+Agent, Workspace and the ⌄, and the whole of it is the one button that opens the
+Switch drawer. The title keeps its own width until that would pass 60 % of the
+row, so what truncates on a phone is the status text, not the name of the Pane.
+No setting lives in the bar: Wrap, Fit and Theme colors are rows in the ⋯ sheet,
+and + belongs to the Tab strip.
 
 Under the top bar the **Tab strip** is one section of two rows. Row 1 is **+**
 for a new Tab (herdr Muxes only) and then that Workspace's Tabs, each with a
 6 px Dot rolled up from its Panes, its label, and its Pane count when it holds
 several; the row carries the hairline the accent underline slides along. Row 2
 lists the Panes of the open Tab as pills, and appears only when the Tab holds
-more than one. A horizontal **touch** swipe on the strip moves between Tabs:
+more than one; it hangs on that same hairline (`border-t`, pulled up by the one
+pixel the row above draws) and is indented to where the Tab labels start, so the
+two rows read as one bordered section. A horizontal **touch** swipe on the strip moves between Tabs:
 Chromium gives a horizontal drag to the nearest scroller and fires
 `pointercancel`, so the gesture reads `touchend`, and it is ignored when the
 strip itself scrolled, which is what a drag means once there are more Tabs than
@@ -209,11 +213,13 @@ The dock is the only place with input, and it is one bar plus what it opens:
 
 | Row | Agent Pane | Shell Pane |
 |---|---|---|
-| 1 | `esc` `↑` `↓` `enter` and the keys toggle, then a hairline, then the pills | `esc` `tab` `enter` and the toggle, then the Hint pills the Screen printed |
+| 1 | the keys toggle, then `esc` `▲` `▼` `enter`, then a hairline, then the pills | the toggle, then `esc` `tab` `enter`, then the Hint pills the Screen printed |
 | 2 | the whole preset, while the toggle is on | the same, open by default |
 | 3 | the composer | — |
 
-The pills scroll at the right of the row behind the same right-edge fade the
+The toggle leads the row it opens, filled with `--surface` and the hairline so
+it reads as a control among the caps, and accent while the preset is open. The
+pills scroll at the right of the row behind the same right-edge fade the
 grid uses (`FADE`). The toggle carries `aria-expanded` and remembers its state
 per kind (`tautan.keys.agent`, `tautan.keys.shell`), and the row it opens rises
 into place with `.rise`, which reduced motion turns off. Which caps the row holds
@@ -233,10 +239,17 @@ them) scroll horizontally in one row, 8 px radius, 13 px:
 | Generated text | `--bg`, hairline border, `✦` in accent, label in `--fg` | fills the composer |
 | Static text | `--bg`, hairline border, label in `--muted` | fills the composer |
 
+A key pill is a short label and a compact glyph, because it shares one scrolling
+row with every other: `pillLabel()` in `web/replies.ts` drops a parenthesised
+aside and the `on` or `off` of a mode, then cuts at 14 characters, so
+`auto mode on (shift+tab to cycle)` prints `auto mode ⇧⇥`. The glyph is
+`keyGlyph()` from `web/keys.ts`, the same map the key caps spell from. The full
+text stays in the accessible name.
+
 The order is: the keys `shared/blocked.ts` offers for the blocked prompt
-(`Yes ↵`, `No esc`, then the Mux's own hint keys), plus `↑` `↓` when the
-detection shows two or more numbered options; then the Hints the Screen itself
-printed; then up to three drafts from
+(`Yes ↵`, `No esc`, then the Mux's own hint keys); then the Hints the Screen
+itself printed — the arrows live in the dock's own inline keys, so a numbered
+list adds no arrow pills; then up to three drafts from
 `StatePane.suggestions`; then the static set for the Agent — Claude Code gets
 Continue · Run the tests · Commit and push · Explain the diff · Stop here, Pi
 gets Continue · Run the tests · Show me the plan, any other Agent gets
